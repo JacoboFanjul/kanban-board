@@ -1,37 +1,226 @@
-# High level steps for project
+# Project Plan
 
-Part 1: Plan
+## Part 1: Planning and Documentation
 
-Enrich this document to plan out each of these parts in detail, with substeps listed out as a checklist to be checked off by the agent, and with tests and success critieria for each. Also create an AGENTS.md file inside the frontend directory that describes the existing code there. Ensure the user checks and approves the plan.
+Enrich this document with detailed substeps, checklists, tests, and success criteria.
+Create an AGENTS.md inside the frontend directory describing the existing code.
+Get user approval before proceeding.
 
-Part 2: Scaffolding
+- [x] Explore existing frontend codebase
+- [x] Write detailed plan for all parts
+- [x] Create frontend/AGENTS.md
+- [ ] User approves plan
 
-Set up the Docker infrastructure, the backend in backend/ with FastAPI, and write the start and stop scripts in the scripts/ directory. This should serve example static HTML to confirm that a 'hello world' example works running locally and also make an API call.
+### Success Criteria
+- PLAN.md has actionable checklists for every part
+- frontend/AGENTS.md accurately describes the codebase
+- User has reviewed and approved
 
-Part 3: Add in Frontend
+---
 
-Now update so that the frontend is statically built and served, so that the app has the demo Kanban board displayed at /. Comprehensive unit and integration tests.
+## Part 2: Frontend Cleanup
 
-Part 4: Add in a fake user sign in experience
+Verify the frontend is clean of any AI chat code or unused features.
+The AGENTS.md reference mentions AI chat removal, but exploration confirmed no AI chat
+code exists. This step verifies that and ensures a clean baseline.
 
-Now update so that on first hitting /, you need to log in with dummy credentials ("user", "password") in order to see the Kanban, and you can log out. Comprehensive tests.
+- [ ] Grep frontend for any chat-related code, AI imports, or unused dependencies
+- [ ] Remove any dead code or unused imports found
+- [ ] Run existing frontend tests to confirm nothing is broken
+- [ ] Verify all tests pass (unit + e2e)
 
-Part 5: Database modeling
+### Tests
+- `npm run test:unit` passes
+- `npm run test:e2e` passes
+- No chat-related code exists in any frontend file
 
-Now propose a database schema for the Kanban, saving it as JSON. Document the database approach in docs/ and get user sign off.
+### Success Criteria
+- Frontend is confirmed clean with no dead code
+- All existing tests pass on the clean baseline
 
-Part 6: Backend
+---
 
-Now add API routes to allow the backend to read and change the Kanban for a given user; test this thoroughly with backend unit tests. The database should be created if it doesn't exist.
+## Part 3: Scaffolding
 
-Part 7: Frontend + Backend
+Set up Docker infrastructure, FastAPI backend in backend/, and start/stop scripts
+in scripts/. Serve example static HTML and expose a test API endpoint.
 
-Now have the frontend actually use the backend API, so that the app is a proper persistent Kanban board. Test very throughly.
+- [ ] Create backend/pyproject.toml with FastAPI, uvicorn dependencies (managed by uv)
+- [ ] Create backend/app/main.py with FastAPI app
+- [ ] Add GET / that serves a static "Hello World" HTML page
+- [ ] Add GET /api/health that returns `{"status": "ok"}`
+- [ ] Create Dockerfile at project root
+  - Python base image
+  - Install uv, then use uv to install backend dependencies
+  - Copy backend code
+  - Expose port 8000
+  - CMD: uvicorn
+- [ ] Create docker-compose.yml at project root
+  - Mount a local volume (./data/) to persist SQLite database across restarts
+  - Port mapping 8000:8000
+- [ ] Create scripts/start.sh (Linux) -- builds and starts container
+- [ ] Create scripts/stop.sh (Linux) -- stops container
+- [ ] Make scripts executable
+- [ ] Build and run container, verify it works
 
-Part 8: AI connectivity
+### Tests
+- `docker-compose up --build` succeeds
+- `curl http://localhost:8000/` returns HTML with "Hello World"
+- `curl http://localhost:8000/api/health` returns `{"status": "ok"}`
+- `scripts/start.sh` builds and starts the container
+- `scripts/stop.sh` stops the container
+- Container restarts preserve the ./data/ directory
 
-Now allow the backend to make an AI call via OpenRouter. Test connectivity with a simple "2+2" test and ensure the AI call is working.
+### Success Criteria
+- Docker container runs FastAPI serving static HTML and a health API endpoint
+- Start/stop scripts work on Linux
+- Volume mount for ./data/ is confirmed working
 
-Part 9: Now extend the backend call so that it always calls the AI with the JSON of the Kanban board, plus the user's question (and conversation history). The AI should respond with Structured Outputs that includes the response to the user and optionaly an update to the Kanban. Test thoroughly.
+---
 
-Part 10: Now add a beautiful sidebar widget to the UI supporting full AI chat, and allowing the LLM (as it determines) to update the Kanban based on its Structured Outputs. If the AI updates the Kanban, then the UI should refresh automatically.
+## Part 4: Add in Frontend
+
+Build the Next.js frontend as a static export and serve it from FastAPI at /.
+The demo Kanban board should display at http://localhost:8000/.
+
+- [ ] Configure next.config.ts for static export (`output: 'export'`)
+- [ ] Add a build step in the Dockerfile: install Node, npm install, npm run build
+- [ ] Copy the static export output into a directory the backend can serve
+- [ ] Update FastAPI to serve the static frontend files at / (using StaticFiles mount)
+- [ ] Ensure API routes under /api/ still work alongside the static frontend
+- [ ] Build and run container, verify Kanban board loads at /
+- [ ] Write backend integration test: GET / returns HTML containing expected content
+- [ ] Write backend integration test: GET /api/health still returns ok
+
+### Tests
+- Backend integration tests (pytest + httpx): static files served, API routes work
+- Frontend unit tests still pass (`npm run test:unit`)
+- Manual verification: Kanban board renders at http://localhost:8000/
+
+### Success Criteria
+- Kanban board displays at http://localhost:8000/ inside Docker
+- API endpoints remain accessible under /api/
+- All tests pass
+
+---
+
+## Part 5: Add Authentication
+
+Add a login screen. Users must authenticate with hardcoded credentials ("user" /
+"password") via the backend API to access the Kanban board. Session-based auth
+using a token/cookie.
+
+- [ ] Backend: POST /api/login endpoint (accepts username + password, returns session token)
+- [ ] Backend: POST /api/logout endpoint (invalidates session)
+- [ ] Backend: GET /api/me endpoint (returns current user if authenticated, 401 otherwise)
+- [ ] Backend: auth middleware/dependency that protects /api/ routes (except login)
+- [ ] Backend: session storage (in-memory dict for MVP, keyed by token)
+- [ ] Backend unit tests for all auth endpoints (valid login, invalid login, logout, protected routes)
+- [ ] Frontend: login page component with username/password form
+- [ ] Frontend: auth state management (store token, redirect to login if unauthenticated)
+- [ ] Frontend: logout button on the Kanban board
+- [ ] Frontend: styling matches the color scheme (purple submit button, navy headings)
+- [ ] Frontend unit tests for login component
+- [ ] End-to-end: rebuild and test in Docker
+
+### Tests
+- pytest: login with correct creds returns 200 + token
+- pytest: login with wrong creds returns 401
+- pytest: accessing /api/me without token returns 401
+- pytest: accessing /api/me with valid token returns user info
+- pytest: logout invalidates the token
+- Frontend unit tests: login form renders, submits, handles errors
+- E2E in Docker: full login -> board -> logout flow
+
+### Success Criteria
+- Cannot access Kanban board without logging in
+- "user" / "password" grants access
+- Logout returns to login screen
+- All tests pass
+
+---
+
+## Part 6: Database Schema
+
+Design the SQLite database schema for the Kanban board. Document it and get
+user sign off before implementation.
+
+- [ ] Design schema supporting: users, boards, columns, cards
+- [ ] Schema supports multiple users (future-proof) but MVP uses 1 user
+- [ ] Schema supports 1 board per user (MVP)
+- [ ] Columns have an order field for positioning
+- [ ] Cards have an order field for positioning within a column
+- [ ] Save schema as docs/database-schema.json
+- [ ] Document the schema and design decisions in docs/DATABASE.md
+- [ ] Get user approval
+
+### Success Criteria
+- Schema is clear, minimal, and supports the Kanban data model
+- User has approved the schema
+
+---
+
+## Part 7: Backend API
+
+Add API routes to CRUD the Kanban data for the authenticated user. SQLite
+database is created automatically if it does not exist.
+
+- [ ] Database initialization: create tables from schema on app startup if DB doesn't exist
+- [ ] Seed the default user ("user") and default board with initial columns on first run
+- [ ] GET /api/board -- returns the user's board (columns + cards, ordered)
+- [ ] PUT /api/board/columns/{id} -- rename a column
+- [ ] POST /api/board/cards -- create a card in a column
+- [ ] DELETE /api/board/cards/{id} -- delete a card
+- [ ] PUT /api/board/cards/{id}/move -- move a card (reorder within column or across columns)
+- [ ] All endpoints require authentication
+- [ ] Backend unit tests for every endpoint (pytest + httpx)
+- [ ] Test database auto-creation from scratch
+- [ ] Test concurrent operations don't corrupt data
+
+### Tests
+- pytest: GET /api/board returns correct structure
+- pytest: create card, verify it appears in GET /api/board
+- pytest: delete card, verify it's gone
+- pytest: rename column, verify the change
+- pytest: move card within column, verify order
+- pytest: move card across columns, verify both columns update
+- pytest: all endpoints return 401 without auth
+- pytest: DB is created fresh if missing
+
+### Success Criteria
+- Full CRUD for Kanban data via API
+- Database auto-creates on first run
+- All tests pass
+- Data persists across container restarts (volume mount)
+
+---
+
+## Part 8: Frontend + Backend Integration
+
+Connect the frontend to the backend API so the Kanban board is fully persistent.
+
+- [ ] Replace local React state with API calls (fetch board on load, mutate via API)
+- [ ] Board data loads from GET /api/board on mount
+- [ ] Column rename calls PUT /api/board/columns/{id}
+- [ ] Add card calls POST /api/board/cards
+- [ ] Delete card calls DELETE /api/board/cards/{id}
+- [ ] Drag and drop calls PUT /api/board/cards/{id}/move
+- [ ] Handle loading states and API errors gracefully
+- [ ] Auth token sent with every API request
+- [ ] Redirect to login on 401 responses
+- [ ] Update frontend unit tests to mock API calls
+- [ ] Update or add E2E tests for the full flow
+- [ ] Full rebuild and test in Docker
+
+### Tests
+- Frontend unit tests: components render with mocked API data
+- Frontend unit tests: user actions trigger correct API calls
+- E2E in Docker: login -> view board -> add card -> move card -> rename column -> delete card -> logout -> login again -> data persists
+- E2E: refresh page, verify data persists
+
+### Success Criteria
+- Kanban board loads real data from the backend
+- All user actions (add, delete, move, rename) persist to the database
+- Data survives page refreshes and container restarts
+- Login/logout flow works end to end
+- All tests pass
