@@ -9,7 +9,7 @@ Get user approval before proceeding.
 - [x] Explore existing frontend codebase
 - [x] Write detailed plan for all parts
 - [x] Create frontend/AGENTS.md
-- [ ] User approves plan
+- [x] User approves plan
 
 ### Success Criteria
 - PLAN.md has actionable checklists for every part
@@ -24,10 +24,10 @@ Verify the frontend is clean of any AI chat code or unused features.
 The AGENTS.md reference mentions AI chat removal, but exploration confirmed no AI chat
 code exists. This step verifies that and ensures a clean baseline.
 
-- [ ] Grep frontend for any chat-related code, AI imports, or unused dependencies
-- [ ] Remove any dead code or unused imports found
-- [ ] Run existing frontend tests to confirm nothing is broken
-- [ ] Verify all tests pass (unit + e2e)
+- [x] Grep frontend for any chat-related code, AI imports, or unused dependencies
+- [x] Remove any dead code or unused imports found
+- [x] Run existing frontend tests to confirm nothing is broken
+- [x] Verify all tests pass (unit + e2e)
 
 ### Tests
 - `npm run test:unit` passes
@@ -45,23 +45,23 @@ code exists. This step verifies that and ensures a clean baseline.
 Set up Docker infrastructure, FastAPI backend in backend/, and start/stop scripts
 in scripts/. Serve example static HTML and expose a test API endpoint.
 
-- [ ] Create backend/pyproject.toml with FastAPI, uvicorn dependencies (managed by uv)
-- [ ] Create backend/app/main.py with FastAPI app
-- [ ] Add GET / that serves a static "Hello World" HTML page
-- [ ] Add GET /api/health that returns `{"status": "ok"}`
-- [ ] Create Dockerfile at project root
+- [x] Create backend/pyproject.toml with FastAPI, uvicorn dependencies (managed by uv)
+- [x] Create backend/app/main.py with FastAPI app
+- [x] Add GET / that serves a static "Hello World" HTML page
+- [x] Add GET /api/health that returns `{"status": "ok"}`
+- [x] Create Dockerfile at project root
   - Python base image
   - Install uv, then use uv to install backend dependencies
   - Copy backend code
   - Expose port 8000
   - CMD: uvicorn
-- [ ] Create docker-compose.yml at project root
+- [x] Create docker-compose.yml at project root
   - Mount a local volume (./data/) to persist SQLite database across restarts
   - Port mapping 8000:8000
-- [ ] Create scripts/start.sh (Linux) -- builds and starts container
-- [ ] Create scripts/stop.sh (Linux) -- stops container
-- [ ] Make scripts executable
-- [ ] Build and run container, verify it works
+- [x] Create scripts/start.sh (Linux) -- builds and starts container
+- [x] Create scripts/stop.sh (Linux) -- stops container
+- [x] Make scripts executable
+- [x] Build and run container, verify it works
 
 ### Tests
 - `docker-compose up --build` succeeds
