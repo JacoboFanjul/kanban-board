@@ -83,14 +83,14 @@ in scripts/. Serve example static HTML and expose a test API endpoint.
 Build the Next.js frontend as a static export and serve it from FastAPI at /.
 The demo Kanban board should display at http://localhost:8000/.
 
-- [ ] Configure next.config.ts for static export (`output: 'export'`)
-- [ ] Add a build step in the Dockerfile: install Node, npm install, npm run build
-- [ ] Copy the static export output into a directory the backend can serve
-- [ ] Update FastAPI to serve the static frontend files at / (using StaticFiles mount)
-- [ ] Ensure API routes under /api/ still work alongside the static frontend
-- [ ] Build and run container, verify Kanban board loads at /
-- [ ] Write backend integration test: GET / returns HTML containing expected content
-- [ ] Write backend integration test: GET /api/health still returns ok
+- [x] Configure next.config.ts for static export (`output: 'export'`)
+- [x] Add a build step in the Dockerfile: install Node, npm install, npm run build
+- [x] Copy the static export output into a directory the backend can serve
+- [x] Update FastAPI to serve the static frontend files at / (using StaticFiles mount)
+- [x] Ensure API routes under /api/ still work alongside the static frontend
+- [x] Build and run container, verify Kanban board loads at /
+- [x] Write backend integration test: GET / returns HTML containing expected content
+- [x] Write backend integration test: GET /api/health still returns ok
 
 ### Tests
 - Backend integration tests (pytest + httpx): static files served, API routes work
