@@ -110,18 +110,18 @@ Add a login screen. Users must authenticate with hardcoded credentials ("user" /
 "password") via the backend API to access the Kanban board. Session-based auth
 using a token/cookie.
 
-- [ ] Backend: POST /api/login endpoint (accepts username + password, returns session token)
-- [ ] Backend: POST /api/logout endpoint (invalidates session)
-- [ ] Backend: GET /api/me endpoint (returns current user if authenticated, 401 otherwise)
-- [ ] Backend: auth middleware/dependency that protects /api/ routes (except login)
-- [ ] Backend: session storage (in-memory dict for MVP, keyed by token)
-- [ ] Backend unit tests for all auth endpoints (valid login, invalid login, logout, protected routes)
-- [ ] Frontend: login page component with username/password form
-- [ ] Frontend: auth state management (store token, redirect to login if unauthenticated)
-- [ ] Frontend: logout button on the Kanban board
-- [ ] Frontend: styling matches the color scheme (purple submit button, navy headings)
-- [ ] Frontend unit tests for login component
-- [ ] End-to-end: rebuild and test in Docker
+- [x] Backend: POST /api/login endpoint (accepts username + password, returns session token)
+- [x] Backend: POST /api/logout endpoint (invalidates session)
+- [x] Backend: GET /api/me endpoint (returns current user if authenticated, 401 otherwise)
+- [x] Backend: auth middleware/dependency that protects /api/ routes (except login)
+- [x] Backend: session storage (in-memory dict for MVP, keyed by token)
+- [x] Backend unit tests for all auth endpoints (valid login, invalid login, logout, protected routes)
+- [x] Frontend: login page component with username/password form
+- [x] Frontend: auth state management (store token, redirect to login if unauthenticated)
+- [x] Frontend: logout button on the Kanban board
+- [x] Frontend: styling matches the color scheme (purple submit button, navy headings)
+- [x] Frontend unit tests for login component
+- [x] End-to-end: rebuild and test in Docker
 
 ### Tests
 - pytest: login with correct creds returns 200 + token
