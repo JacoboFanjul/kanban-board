@@ -199,18 +199,18 @@ database is created automatically if it does not exist.
 
 Connect the frontend to the backend API so the Kanban board is fully persistent.
 
-- [ ] Replace local React state with API calls (fetch board on load, mutate via API)
-- [ ] Board data loads from GET /api/board on mount
-- [ ] Column rename calls PUT /api/board/columns/{id}
-- [ ] Add card calls POST /api/board/cards
-- [ ] Delete card calls DELETE /api/board/cards/{id}
-- [ ] Drag and drop calls PUT /api/board/cards/{id}/move
-- [ ] Handle loading states and API errors gracefully
-- [ ] Auth token sent with every API request
-- [ ] Redirect to login on 401 responses
-- [ ] Update frontend unit tests to mock API calls
-- [ ] Update or add E2E tests for the full flow
-- [ ] Full rebuild and test in Docker
+- [x] Replace local React state with API calls (fetch board on load, mutate via API)
+- [x] Board data loads from GET /api/board on mount
+- [x] Column rename calls PUT /api/board/columns/{id}
+- [x] Add card calls POST /api/board/cards
+- [x] Delete card calls DELETE /api/board/cards/{id}
+- [x] Drag and drop calls PUT /api/board/cards/{id}/move
+- [x] Handle loading states and API errors gracefully
+- [x] Auth token sent with every API request
+- [x] Redirect to login on 401 responses
+- [x] Update frontend unit tests to mock API calls
+- [x] Update or add E2E tests for the full flow
+- [x] Full rebuild and test in Docker
 
 ### Tests
 - Frontend unit tests: components render with mocked API data

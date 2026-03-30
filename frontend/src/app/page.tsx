@@ -35,5 +35,5 @@ export default function Home() {
 
   if (!ready) return null;
   if (!token) return <LoginForm onLogin={handleLogin} />;
-  return <KanbanBoard onLogout={handleLogout} />;
+  return <KanbanBoard token={token} onLogout={handleLogout} />;
 }
