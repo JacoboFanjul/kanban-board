@@ -145,14 +145,14 @@ using a token/cookie.
 Design the SQLite database schema for the Kanban board. Document it and get
 user sign off before implementation.
 
-- [ ] Design schema supporting: users, boards, columns, cards
-- [ ] Schema supports multiple users (future-proof) but MVP uses 1 user
-- [ ] Schema supports 1 board per user (MVP)
-- [ ] Columns have an order field for positioning
-- [ ] Cards have an order field for positioning within a column
-- [ ] Save schema as docs/database-schema.json
-- [ ] Document the schema and design decisions in docs/DATABASE.md
-- [ ] Get user approval
+- [x] Design schema supporting: users, boards, columns, cards
+- [x] Schema supports multiple users (future-proof) but MVP uses 1 user
+- [x] Schema supports 1 board per user (MVP)
+- [x] Columns have an order field for positioning
+- [x] Cards have an order field for positioning within a column
+- [x] Save schema as docs/database-schema.json
+- [x] Document the schema and design decisions in docs/DATABASE.md
+- [x] Get user approval
 
 ### Success Criteria
 - Schema is clear, minimal, and supports the Kanban data model
@@ -165,17 +165,17 @@ user sign off before implementation.
 Add API routes to CRUD the Kanban data for the authenticated user. SQLite
 database is created automatically if it does not exist.
 
-- [ ] Database initialization: create tables from schema on app startup if DB doesn't exist
-- [ ] Seed the default user ("user") and default board with initial columns on first run
-- [ ] GET /api/board -- returns the user's board (columns + cards, ordered)
-- [ ] PUT /api/board/columns/{id} -- rename a column
-- [ ] POST /api/board/cards -- create a card in a column
-- [ ] DELETE /api/board/cards/{id} -- delete a card
-- [ ] PUT /api/board/cards/{id}/move -- move a card (reorder within column or across columns)
-- [ ] All endpoints require authentication
-- [ ] Backend unit tests for every endpoint (pytest + httpx)
-- [ ] Test database auto-creation from scratch
-- [ ] Test concurrent operations don't corrupt data
+- [x] Database initialization: create tables from schema on app startup if DB doesn't exist
+- [x] Seed the default user ("user") and default board with initial columns on first run
+- [x] GET /api/board -- returns the user's board (columns + cards, ordered)
+- [x] PUT /api/board/columns/{id} -- rename a column
+- [x] POST /api/board/cards -- create a card in a column
+- [x] DELETE /api/board/cards/{id} -- delete a card
+- [x] PUT /api/board/cards/{id}/move -- move a card (reorder within column or across columns)
+- [x] All endpoints require authentication
+- [x] Backend unit tests for every endpoint (pytest + httpx)
+- [x] Test database auto-creation from scratch
+- [x] Test concurrent operations don't corrupt data
 
 ### Tests
 - pytest: GET /api/board returns correct structure

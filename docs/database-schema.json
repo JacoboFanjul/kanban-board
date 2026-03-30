@@ -1,0 +1,43 @@
+{
+  "tables": [
+    {
+      "name": "users",
+      "description": "One row per registered user. MVP seeds a single user.",
+      "columns": [
+        { "name": "username",      "type": "TEXT",    "constraints": ["PRIMARY KEY"] },
+        { "name": "password_hash", "type": "TEXT",    "constraints": ["NOT NULL"] }
+      ]
+    },
+    {
+      "name": "boards",
+      "description": "One board per user (enforced by the UNIQUE constraint). MVP uses one board per user.",
+      "columns": [
+        { "name": "id",         "type": "TEXT",    "constraints": ["PRIMARY KEY"] },
+        { "name": "username",   "type": "TEXT",    "constraints": ["NOT NULL", "REFERENCES users(username)"] },
+        { "name": "created_at", "type": "TEXT",    "constraints": ["NOT NULL"] }
+      ],
+      "unique": [["username"]]
+    },
+    {
+      "name": "columns",
+      "description": "Kanban columns belonging to a board, ordered by position.",
+      "columns": [
+        { "name": "id",       "type": "TEXT",    "constraints": ["PRIMARY KEY"] },
+        { "name": "board_id", "type": "TEXT",    "constraints": ["NOT NULL", "REFERENCES boards(id) ON DELETE CASCADE"] },
+        { "name": "title",    "type": "TEXT",    "constraints": ["NOT NULL"] },
+        { "name": "position", "type": "INTEGER", "constraints": ["NOT NULL"] }
+      ]
+    },
+    {
+      "name": "cards",
+      "description": "Cards belonging to a column, ordered by position within that column.",
+      "columns": [
+        { "name": "id",        "type": "TEXT",    "constraints": ["PRIMARY KEY"] },
+        { "name": "column_id", "type": "TEXT",    "constraints": ["NOT NULL", "REFERENCES columns(id) ON DELETE CASCADE"] },
+        { "name": "title",     "type": "TEXT",    "constraints": ["NOT NULL"] },
+        { "name": "details",   "type": "TEXT",    "constraints": ["NOT NULL", "DEFAULT ''"] },
+        { "name": "position",  "type": "INTEGER", "constraints": ["NOT NULL"] }
+      ]
+    }
+  ]
+}

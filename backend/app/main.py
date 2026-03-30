@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated
 
@@ -12,8 +13,18 @@ from app.auth import (
     require_token,
     validate_credentials,
 )
+from app.board import router as board_router
+from app import db
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    db.init_db()
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
+app.include_router(board_router)
 
 
 class LoginRequest(BaseModel):
