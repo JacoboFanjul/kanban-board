@@ -43,18 +43,25 @@ function normalizeBoard(api: ApiBoard): BoardData {
 export const KanbanBoard = ({ token, onLogout }: Props) => {
   const [board, setBoard] = useState<BoardData | null>(null);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState(false);
 
   const handle401 = useCallback(() => {
     onLogout?.();
   }, [onLogout]);
 
-  useEffect(() => {
+  const loadBoard = useCallback(() => {
+    setLoadError(false);
     apiGetBoard(token)
       .then((data) => setBoard(normalizeBoard(data)))
       .catch((err: unknown) => {
         if (err instanceof ApiError && err.status === 401) handle401();
+        else setLoadError(true);
       });
   }, [token, handle401]);
+
+  useEffect(() => {
+    loadBoard();
+  }, [loadBoard]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -72,6 +79,7 @@ export const KanbanBoard = ({ token, onLogout }: Props) => {
     if (!over || active.id === over.id || !board) return;
 
     const activeId = active.id as string;
+    const prevBoard = board;
     const newColumns = moveCard(board.columns, activeId, over.id as string);
     setBoard((prev) => (prev ? { ...prev, columns: newColumns } : prev));
 
@@ -80,6 +88,7 @@ export const KanbanBoard = ({ token, onLogout }: Props) => {
       const position = targetColumn.cardIds.indexOf(activeId);
       apiMoveCard(token, activeId, targetColumn.id, position).catch((err: unknown) => {
         if (err instanceof ApiError && err.status === 401) handle401();
+        else setBoard(prevBoard);
       });
     }
   };
@@ -100,6 +109,7 @@ export const KanbanBoard = ({ token, onLogout }: Props) => {
   const handleRenameColumnCommit = (columnId: string, title: string) => {
     apiRenameColumn(token, columnId, title).catch((err: unknown) => {
       if (err instanceof ApiError && err.status === 401) handle401();
+      else loadBoard();
     });
   };
 
@@ -125,6 +135,7 @@ export const KanbanBoard = ({ token, onLogout }: Props) => {
   };
 
   const handleDeleteCard = (columnId: string, cardId: string) => {
+    const prevBoard = board;
     setBoard((prev) => {
       if (!prev) return prev;
       return {
@@ -141,12 +152,26 @@ export const KanbanBoard = ({ token, onLogout }: Props) => {
     });
     apiDeleteCard(token, cardId).catch((err: unknown) => {
       if (err instanceof ApiError && err.status === 401) handle401();
+      else setBoard(prevBoard);
     });
   };
 
   const activeCard = activeCardId ? cardsById[activeCardId] : null;
 
   if (!board) {
+    if (loadError) {
+      return (
+        <div className="flex min-h-screen flex-col items-center justify-center gap-4">
+          <p className="text-sm text-[var(--gray-text)]">Failed to load board.</p>
+          <button
+            onClick={loadBoard}
+            className="rounded-xl bg-[var(--secondary-purple)] px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+          >
+            Retry
+          </button>
+        </div>
+      );
+    }
     return (
       <div className="flex min-h-screen items-center justify-center">
         <p className="text-sm text-[var(--gray-text)]">Loading...</p>

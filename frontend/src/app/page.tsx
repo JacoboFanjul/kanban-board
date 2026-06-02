@@ -28,9 +28,12 @@ export default function Home() {
   };
 
   const handleLogout = async () => {
-    if (token) await apiLogout(token);
-    removeToken();
-    setToken(null);
+    try {
+      if (token) await apiLogout(token);
+    } finally {
+      removeToken();
+      setToken(null);
+    }
   };
 
   if (!ready) return null;

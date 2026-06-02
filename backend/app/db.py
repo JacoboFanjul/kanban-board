@@ -5,6 +5,8 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Generator
 
+from app.security import hash_password
+
 _SEED_COLUMNS = [
     ("col-backlog",   "Backlog",     0),
     ("col-discovery", "Discovery",   1),
@@ -87,7 +89,7 @@ def init_db() -> None:
 
     board_id = secrets.token_hex(8)
     now = datetime.now(timezone.utc).isoformat()
-    conn.execute("INSERT INTO users VALUES (?, ?)", ("user", ""))
+    conn.execute("INSERT INTO users VALUES (?, ?)", ("user", hash_password("password")))
     conn.execute("INSERT INTO boards VALUES (?, ?, ?)", (board_id, "user", now))
     for col_id, title, pos in _SEED_COLUMNS:
         conn.execute("INSERT INTO columns VALUES (?, ?, ?, ?)", (col_id, board_id, title, pos))
@@ -100,6 +102,14 @@ def init_db() -> None:
 # ---------------------------------------------------------------------------
 # Queries
 # ---------------------------------------------------------------------------
+
+def get_password_hash(username: str) -> str | None:
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT password_hash FROM users WHERE username = ?", (username,)
+        ).fetchone()
+        return row["password_hash"] if row else None
+
 
 def get_board_id(conn: sqlite3.Connection, username: str) -> str | None:
     row = conn.execute("SELECT id FROM boards WHERE username = ?", (username,)).fetchone()

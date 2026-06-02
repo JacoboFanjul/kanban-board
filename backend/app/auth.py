@@ -1,25 +1,40 @@
 import secrets
+from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
 from fastapi import Header, HTTPException
 
-_USER = "user"
-_PASSWORD = "password"
+from app.security import verify_password
+from app import db
 
-# In-memory session store: token -> username
-_sessions: dict[str, str] = {}
+_SESSION_TTL = timedelta(hours=24)
+
+# session store: token -> (username, created_at)
+_sessions: dict[str, tuple[str, datetime]] = {}
 
 
 def validate_credentials(username: str, password: str) -> str | None:
-    if username == _USER and password == _PASSWORD:
-        return username
-    return None
+    stored_hash = db.get_password_hash(username)
+    if stored_hash is None:
+        return None
+    return username if verify_password(password, stored_hash) else None
 
 
 def create_session(username: str) -> str:
     token = secrets.token_hex(32)
-    _sessions[token] = username
+    _sessions[token] = (username, datetime.now(timezone.utc))
     return token
+
+
+def _get_session_username(token: str) -> str | None:
+    entry = _sessions.get(token)
+    if not entry:
+        return None
+    username, created_at = entry
+    if datetime.now(timezone.utc) - created_at > _SESSION_TTL:
+        _sessions.pop(token, None)
+        return None
+    return username
 
 
 def _parse_bearer(authorization: str | None) -> str:
@@ -31,7 +46,7 @@ def _parse_bearer(authorization: str | None) -> str:
 def require_auth(authorization: Annotated[str | None, Header()] = None) -> str:
     """Dependency: returns username of the authenticated user."""
     token = _parse_bearer(authorization)
-    username = _sessions.get(token)
+    username = _get_session_username(token)
     if not username:
         raise HTTPException(status_code=401, detail="Not authenticated")
     return username
@@ -40,7 +55,7 @@ def require_auth(authorization: Annotated[str | None, Header()] = None) -> str:
 def require_token(authorization: Annotated[str | None, Header()] = None) -> str:
     """Dependency: returns the validated raw token (used for logout)."""
     token = _parse_bearer(authorization)
-    if token not in _sessions:
+    if not _get_session_username(token):
         raise HTTPException(status_code=401, detail="Not authenticated")
     return token
 
