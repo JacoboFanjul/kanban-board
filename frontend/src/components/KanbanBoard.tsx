@@ -24,13 +24,18 @@ import {
   apiRenameColumn,
   apiCreateColumn,
   apiDeleteColumn,
+  apiSetWipLimit,
   apiCreateCard,
   apiUpdateCard,
+  apiArchiveCard,
+  apiGetArchivedCards,
+  apiSearchCards,
   apiDeleteCard,
   apiMoveCard,
   apiChangePassword,
   type ApiBoard,
   type ApiBoardSummary,
+  type ApiCardSearchResult,
 } from "@/lib/api";
 
 interface Props {
@@ -45,7 +50,12 @@ function normalizeBoard(api: ApiBoard): BoardData {
     col.cards.forEach((card) => {
       cards[card.id] = card;
     });
-    return { id: col.id, title: col.title, cardIds: col.cards.map((c) => c.id) };
+    return {
+      id: col.id,
+      title: col.title,
+      wip_limit: col.wip_limit,
+      cardIds: col.cards.map((c) => c.id),
+    };
   });
   return { columns, cards };
 }
@@ -65,6 +75,12 @@ export const KanbanBoard = ({ token, username, onLogout }: Props) => {
   const [passwordSuccess, setPasswordSuccess] = useState(false);
   const [boardTitle, setBoardTitle] = useState("");
   const [editingBoardTitle, setEditingBoardTitle] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<ApiCardSearchResult[] | null>(null);
+  const [showArchive, setShowArchive] = useState(false);
+  const [archivedCards, setArchivedCards] = useState<ApiCardSearchResult[]>([]);
+  const [wipEditingColId, setWipEditingColId] = useState<string | null>(null);
+  const [wipInputValue, setWipInputValue] = useState("");
   const boardMenuRef = useRef<HTMLDivElement>(null);
 
   const handle401 = useCallback(() => {
@@ -225,13 +241,86 @@ export const KanbanBoard = ({ token, username, onLogout }: Props) => {
     });
   };
 
+  const handleArchiveCard = (columnId: string, cardId: string) => {
+    const prevBoard = board;
+    setBoard((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        cards: Object.fromEntries(Object.entries(prev.cards).filter(([id]) => id !== cardId)),
+        columns: prev.columns.map((col) =>
+          col.id === columnId
+            ? { ...col, cardIds: col.cardIds.filter((id) => id !== cardId) }
+            : col,
+        ),
+      };
+    });
+    apiArchiveCard(token, cardId).catch((err) => {
+      if (err instanceof ApiError && err.status === 401) handle401();
+      else setBoard(prevBoard);
+    });
+  };
+
+  const handleSearch = async (q: string) => {
+    setSearchQuery(q);
+    if (!activeBoardId) return;
+    if (!q.trim()) {
+      setSearchResults(null);
+      return;
+    }
+    try {
+      const results = await apiSearchCards(token, activeBoardId, { q });
+      setSearchResults(results);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) handle401();
+    }
+  };
+
+  const handleShowArchive = async () => {
+    if (!activeBoardId) return;
+    try {
+      const cards = await apiGetArchivedCards(token, activeBoardId);
+      setArchivedCards(cards);
+      setShowArchive(true);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) handle401();
+    }
+  };
+
+  const handleUnarchive = async (cardId: string) => {
+    try {
+      const { apiUnarchiveCard } = await import("@/lib/api");
+      await apiUnarchiveCard(token, cardId);
+      setArchivedCards((prev) => prev.filter((c) => c.id !== cardId));
+      if (activeBoardId) loadBoard(activeBoardId);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) handle401();
+    }
+  };
+
+  const handleSetWipLimit = async (columnId: string, value: string) => {
+    const num = value === "" ? null : parseInt(value, 10);
+    if (value !== "" && (isNaN(num!) || num! < 1)) return;
+    try {
+      await apiSetWipLimit(token, columnId, num);
+      setBoard((prev) =>
+        prev
+          ? { ...prev, columns: prev.columns.map((c) => c.id === columnId ? { ...c, wip_limit: num } : c) }
+          : prev,
+      );
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) handle401();
+    }
+    setWipEditingColId(null);
+  };
+
   const handleAddColumn = async () => {
     if (!activeBoardId) return;
     try {
       const col = await apiCreateColumn(token, activeBoardId, "New Column");
       setBoard((prev) =>
         prev
-          ? { ...prev, columns: [...prev.columns, { id: col.id, title: col.title, cardIds: [] }] }
+          ? { ...prev, columns: [...prev.columns, { id: col.id, title: col.title, wip_limit: null, cardIds: [] }] }
           : prev,
       );
     } catch (err) {
@@ -556,6 +645,28 @@ export const KanbanBoard = ({ token, username, onLogout }: Props) => {
             </div>
           )}
 
+          {/* Search bar */}
+          <div className="flex items-center gap-3">
+            <div className="relative flex-1 max-w-md">
+              <input
+                type="search"
+                placeholder="Search cards..."
+                value={searchQuery}
+                onChange={(e) => handleSearch(e.target.value)}
+                className="w-full rounded-xl border border-[var(--stroke)] bg-white px-4 py-2 pl-9 text-sm text-[var(--navy-dark)] outline-none focus:border-[var(--primary-blue)]"
+              />
+              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--gray-text)]">
+                ⌕
+              </span>
+            </div>
+            <button
+              onClick={handleShowArchive}
+              className="rounded-xl border border-[var(--stroke)] bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.15em] text-[var(--gray-text)] transition hover:border-[var(--primary-blue)] hover:text-[var(--primary-blue)]"
+            >
+              Archive
+            </button>
+          </div>
+
           {/* Column pills */}
           <div className="flex flex-wrap items-center gap-4">
             {board.columns.map((column) => (
@@ -575,6 +686,111 @@ export const KanbanBoard = ({ token, username, onLogout }: Props) => {
             </button>
           </div>
         </header>
+
+        {/* WIP limit edit modal */}
+        {wipEditingColId && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setWipEditingColId(null)}>
+            <div className="rounded-2xl border border-[var(--stroke)] bg-white p-6 shadow-[var(--shadow)] w-72" onClick={(e) => e.stopPropagation()}>
+              <h3 className="mb-4 text-sm font-semibold uppercase tracking-[0.2em] text-[var(--gray-text)]">
+                WIP Limit
+              </h3>
+              <p className="mb-3 text-xs text-[var(--gray-text)]">Set the max number of cards in this column (leave blank to remove).</p>
+              <input
+                type="number"
+                min={1}
+                value={wipInputValue}
+                onChange={(e) => setWipInputValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleSetWipLimit(wipEditingColId, wipInputValue);
+                  if (e.key === "Escape") setWipEditingColId(null);
+                }}
+                placeholder="e.g. 3"
+                autoFocus
+                className="w-full rounded-xl border border-[var(--stroke)] bg-[var(--surface)] px-3 py-2 text-sm outline-none focus:border-[var(--primary-blue)]"
+              />
+              <div className="mt-4 flex gap-2">
+                <button
+                  onClick={() => handleSetWipLimit(wipEditingColId, wipInputValue)}
+                  className="rounded-xl bg-[var(--secondary-purple)] px-4 py-2 text-xs font-semibold text-white transition hover:brightness-110"
+                >
+                  Save
+                </button>
+                <button
+                  onClick={() => setWipEditingColId(null)}
+                  className="rounded-xl border border-[var(--stroke)] px-4 py-2 text-xs font-semibold text-[var(--gray-text)] transition hover:text-[var(--navy-dark)]"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Archive panel */}
+        {showArchive && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setShowArchive(false)}>
+            <div className="rounded-2xl border border-[var(--stroke)] bg-white p-6 shadow-[var(--shadow)] w-full max-w-lg max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold uppercase tracking-[0.2em] text-[var(--gray-text)]">
+                  Archived Cards ({archivedCards.length})
+                </h3>
+                <button onClick={() => setShowArchive(false)} className="text-[var(--gray-text)] hover:text-[var(--navy-dark)]">✕</button>
+              </div>
+              <div className="flex-1 overflow-y-auto space-y-3">
+                {archivedCards.length === 0 ? (
+                  <p className="text-sm text-[var(--gray-text)] text-center py-8">No archived cards.</p>
+                ) : (
+                  archivedCards.map((card) => (
+                    <div key={card.id} className="flex items-start justify-between gap-3 rounded-xl border border-[var(--stroke)] bg-[var(--surface)] px-4 py-3">
+                      <div>
+                        <p className="text-xs text-[var(--gray-text)] mb-1">{card.column_title}</p>
+                        <p className="text-sm font-semibold text-[var(--navy-dark)]">{card.title}</p>
+                        {card.details && <p className="mt-1 text-xs text-[var(--gray-text)]">{card.details}</p>}
+                      </div>
+                      <button
+                        onClick={() => handleUnarchive(card.id)}
+                        className="shrink-0 rounded-lg border border-[var(--stroke)] px-3 py-1 text-xs font-semibold text-[var(--primary-blue)] transition hover:border-[var(--primary-blue)]"
+                      >
+                        Restore
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Search results overlay */}
+        {searchResults !== null && (
+          <div className="rounded-2xl border border-[var(--stroke)] bg-white p-6 shadow-[var(--shadow)]">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold uppercase tracking-[0.2em] text-[var(--gray-text)]">
+                Search Results ({searchResults.length})
+              </h3>
+              <button
+                onClick={() => { setSearchResults(null); setSearchQuery(""); }}
+                className="text-xs text-[var(--gray-text)] hover:text-[var(--navy-dark)]"
+              >
+                Clear
+              </button>
+            </div>
+            {searchResults.length === 0 ? (
+              <p className="text-sm text-[var(--gray-text)]">No cards found.</p>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {searchResults.map((card) => (
+                  <div key={card.id} className="rounded-xl border border-[var(--stroke)] bg-[var(--surface)] px-4 py-3">
+                    <p className="text-xs text-[var(--gray-text)] mb-1">{card.column_title}</p>
+                    <p className="text-sm font-semibold text-[var(--navy-dark)]">{card.title}</p>
+                    {card.priority && <p className="mt-1 text-xs font-semibold capitalize text-orange-600">{card.priority}</p>}
+                    {card.details && <p className="mt-1 text-xs text-[var(--gray-text)] line-clamp-2">{card.details}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {board.columns.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-4 rounded-3xl border border-dashed border-[var(--stroke)] py-24">
@@ -611,7 +827,13 @@ export const KanbanBoard = ({ token, username, onLogout }: Props) => {
                   onAddCard={handleAddCard}
                   onDeleteCard={handleDeleteCard}
                   onEditCard={handleEditCard}
+                  onArchiveCard={handleArchiveCard}
                   onDeleteColumn={handleDeleteColumn}
+                  onEditWipLimit={(columnId) => {
+                    setWipEditingColId(columnId);
+                    const col = board.columns.find((c) => c.id === columnId);
+                    setWipInputValue(col?.wip_limit?.toString() ?? "");
+                  }}
                 />
               ))}
             </section>

@@ -4,11 +4,19 @@ export type ApiCard = {
   details: string;
   due_date: string | null;
   label: string | null;
+  priority: string | null;
+  created_at: string | null;
+};
+
+export type ApiCardSearchResult = ApiCard & {
+  column_id: string;
+  column_title: string;
 };
 
 export type ApiColumn = {
   id: string;
   title: string;
+  wip_limit: number | null;
   cards: ApiCard[];
 };
 
@@ -239,7 +247,13 @@ export async function apiCreateCard(
 export async function apiUpdateCard(
   token: string,
   cardId: string,
-  updates: { title?: string; details?: string; due_date?: string | null; label?: string | null },
+  updates: {
+    title?: string;
+    details?: string;
+    due_date?: string | null;
+    label?: string | null;
+    priority?: string | null;
+  },
 ): Promise<void> {
   await checked(
     await fetch(`/api/board/cards/${cardId}`, {
@@ -250,11 +264,70 @@ export async function apiUpdateCard(
   );
 }
 
+export async function apiArchiveCard(token: string, cardId: string): Promise<void> {
+  await checked(
+    await fetch(`/api/board/cards/${cardId}/archive`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+  );
+}
+
+export async function apiUnarchiveCard(token: string, cardId: string): Promise<void> {
+  await checked(
+    await fetch(`/api/board/cards/${cardId}/unarchive`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+  );
+}
+
 export async function apiDeleteCard(token: string, cardId: string): Promise<void> {
   await checked(
     await fetch(`/api/board/cards/${cardId}`, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${token}` },
+    }),
+  );
+}
+
+export async function apiSearchCards(
+  token: string,
+  boardId: string,
+  params: { q?: string; label?: string; priority?: string },
+): Promise<ApiCardSearchResult[]> {
+  const qs = new URLSearchParams();
+  if (params.q) qs.set("q", params.q);
+  if (params.label) qs.set("label", params.label);
+  if (params.priority) qs.set("priority", params.priority);
+  const res = await checked(
+    await fetch(`/api/boards/${boardId}/search?${qs.toString()}`, {
+      headers: authHeaders(token),
+    }),
+  );
+  return res.json() as Promise<ApiCardSearchResult[]>;
+}
+
+export async function apiGetArchivedCards(
+  token: string,
+  boardId: string,
+): Promise<ApiCardSearchResult[]> {
+  const res = await checked(
+    await fetch(`/api/boards/${boardId}/archived`, { headers: authHeaders(token) }),
+  );
+  return res.json() as Promise<ApiCardSearchResult[]>;
+}
+
+export async function apiSetWipLimit(
+  token: string,
+  columnId: string,
+  wipLimit: number | null,
+): Promise<void> {
+  await checked(
+    await fetch(`/api/board/columns/${columnId}/wip-limit`, {
+      method: "PUT",
+      headers: authHeaders(token),
+      body: JSON.stringify({ wip_limit: wipLimit }),
     }),
   );
 }

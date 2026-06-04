@@ -4,11 +4,14 @@ export type Card = {
   details: string;
   due_date: string | null;
   label: string | null;
+  priority: string | null;
+  created_at: string | null;
 };
 
 export type Column = {
   id: string;
   title: string;
+  wip_limit: number | null;
   cardIds: string[];
 };
 
@@ -19,73 +22,21 @@ export type BoardData = {
 
 export const initialData: BoardData = {
   columns: [
-    { id: "col-backlog", title: "Backlog", cardIds: ["card-1", "card-2"] },
-    { id: "col-discovery", title: "Discovery", cardIds: ["card-3"] },
-    {
-      id: "col-progress",
-      title: "In Progress",
-      cardIds: ["card-4", "card-5"],
-    },
-    { id: "col-review", title: "Review", cardIds: ["card-6"] },
-    { id: "col-done", title: "Done", cardIds: ["card-7", "card-8"] },
+    { id: "col-backlog", title: "Backlog", wip_limit: null, cardIds: ["card-1", "card-2"] },
+    { id: "col-discovery", title: "Discovery", wip_limit: null, cardIds: ["card-3"] },
+    { id: "col-progress", title: "In Progress", wip_limit: null, cardIds: ["card-4", "card-5"] },
+    { id: "col-review", title: "Review", wip_limit: null, cardIds: ["card-6"] },
+    { id: "col-done", title: "Done", wip_limit: null, cardIds: ["card-7", "card-8"] },
   ],
   cards: {
-    "card-1": {
-      id: "card-1",
-      title: "Align roadmap themes",
-      details: "Draft quarterly themes with impact statements and metrics.",
-      due_date: null,
-      label: null,
-    },
-    "card-2": {
-      id: "card-2",
-      title: "Gather customer signals",
-      details: "Review support tags, sales notes, and churn feedback.",
-      due_date: null,
-      label: null,
-    },
-    "card-3": {
-      id: "card-3",
-      title: "Prototype analytics view",
-      details: "Sketch initial dashboard layout and key drill-downs.",
-      due_date: null,
-      label: null,
-    },
-    "card-4": {
-      id: "card-4",
-      title: "Refine status language",
-      details: "Standardize column labels and tone across the board.",
-      due_date: null,
-      label: null,
-    },
-    "card-5": {
-      id: "card-5",
-      title: "Design card layout",
-      details: "Add hierarchy and spacing for scanning dense lists.",
-      due_date: null,
-      label: null,
-    },
-    "card-6": {
-      id: "card-6",
-      title: "QA micro-interactions",
-      details: "Verify hover, focus, and loading states.",
-      due_date: null,
-      label: null,
-    },
-    "card-7": {
-      id: "card-7",
-      title: "Ship marketing page",
-      details: "Final copy approved and asset pack delivered.",
-      due_date: null,
-      label: null,
-    },
-    "card-8": {
-      id: "card-8",
-      title: "Close onboarding sprint",
-      details: "Document release notes and share internally.",
-      due_date: null,
-      label: null,
-    },
+    "card-1": { id: "card-1", title: "Align roadmap themes", details: "Draft quarterly themes with impact statements and metrics.", due_date: null, label: null, priority: null, created_at: null },
+    "card-2": { id: "card-2", title: "Gather customer signals", details: "Review support tags, sales notes, and churn feedback.", due_date: null, label: null, priority: null, created_at: null },
+    "card-3": { id: "card-3", title: "Prototype analytics view", details: "Sketch initial dashboard layout and key drill-downs.", due_date: null, label: null, priority: null, created_at: null },
+    "card-4": { id: "card-4", title: "Refine status language", details: "Standardize column labels and tone across the board.", due_date: null, label: null, priority: null, created_at: null },
+    "card-5": { id: "card-5", title: "Design card layout", details: "Add hierarchy and spacing for scanning dense lists.", due_date: null, label: null, priority: null, created_at: null },
+    "card-6": { id: "card-6", title: "QA micro-interactions", details: "Verify hover, focus, and loading states.", due_date: null, label: null, priority: null, created_at: null },
+    "card-7": { id: "card-7", title: "Ship marketing page", details: "Final copy approved and asset pack delivered.", due_date: null, label: null, priority: null, created_at: null },
+    "card-8": { id: "card-8", title: "Close onboarding sprint", details: "Document release notes and share internally.", due_date: null, label: null, priority: null, created_at: null },
   },
 };
 

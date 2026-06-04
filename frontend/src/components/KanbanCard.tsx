@@ -12,13 +12,26 @@ const LABEL_COLORS: Record<string, string> = {
   chore: "bg-gray-100 text-gray-600",
 };
 
+const PRIORITY_CONFIG: Record<string, { color: string; dot: string }> = {
+  low: { color: "text-gray-400", dot: "bg-gray-300" },
+  medium: { color: "text-yellow-600", dot: "bg-yellow-400" },
+  high: { color: "text-orange-600", dot: "bg-orange-400" },
+  critical: { color: "text-red-600", dot: "bg-red-500" },
+};
+
+function isOverdue(due_date: string | null): boolean {
+  if (!due_date) return false;
+  return new Date(due_date) < new Date(new Date().toDateString());
+}
+
 type KanbanCardProps = {
   card: Card;
   onDelete: (cardId: string) => void;
   onEdit: (cardId: string, title: string, details: string) => void;
+  onArchive: (cardId: string) => void;
 };
 
-export const KanbanCard = ({ card, onDelete, onEdit }: KanbanCardProps) => {
+export const KanbanCard = ({ card, onDelete, onEdit, onArchive }: KanbanCardProps) => {
   const [editing, setEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(card.title);
   const [editDetails, setEditDetails] = useState(card.details);
@@ -47,6 +60,8 @@ export const KanbanCard = ({ card, onDelete, onEdit }: KanbanCardProps) => {
   };
 
   const labelClass = card.label ? (LABEL_COLORS[card.label] ?? "bg-gray-100 text-gray-600") : null;
+  const priorityCfg = card.priority ? PRIORITY_CONFIG[card.priority] : null;
+  const overdue = isOverdue(card.due_date);
 
   if (editing) {
     return (
@@ -100,6 +115,7 @@ export const KanbanCard = ({ card, onDelete, onEdit }: KanbanCardProps) => {
         "rounded-2xl border border-transparent bg-white px-4 py-4 shadow-[0_12px_24px_rgba(3,33,71,0.08)]",
         "transition-all duration-150",
         isDragging && "opacity-60 shadow-[0_18px_32px_rgba(3,33,71,0.16)]",
+      overdue && !isDragging && "border border-red-200 bg-red-50",
       )}
       {...attributes}
       {...listeners}
@@ -107,25 +123,33 @@ export const KanbanCard = ({ card, onDelete, onEdit }: KanbanCardProps) => {
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          {labelClass && (
-            <span
-              className={clsx(
-                "mb-2 inline-block rounded-full px-2 py-0.5 text-xs font-semibold capitalize",
-                labelClass,
-              )}
-            >
-              {card.label}
-            </span>
-          )}
-          <h4 className="font-display text-base font-semibold text-[var(--navy-dark)]">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {labelClass && (
+              <span
+                className={clsx(
+                  "inline-block rounded-full px-2 py-0.5 text-xs font-semibold capitalize",
+                  labelClass,
+                )}
+              >
+                {card.label}
+              </span>
+            )}
+            {priorityCfg && (
+              <span className={clsx("flex items-center gap-1 text-xs font-semibold capitalize", priorityCfg.color)}>
+                <span className={clsx("h-1.5 w-1.5 rounded-full", priorityCfg.dot)} />
+                {card.priority}
+              </span>
+            )}
+          </div>
+          <h4 className="mt-1 font-display text-base font-semibold text-[var(--navy-dark)]">
             {card.title}
           </h4>
           {card.details && (
             <p className="mt-2 text-sm leading-6 text-[var(--gray-text)]">{card.details}</p>
           )}
           {card.due_date && (
-            <p className="mt-2 text-xs font-semibold text-[var(--gray-text)]">
-              Due: {card.due_date}
+            <p className={clsx("mt-2 text-xs font-semibold", overdue ? "text-red-600" : "text-[var(--gray-text)]")}>
+              {overdue ? "Overdue: " : "Due: "}{card.due_date}
             </p>
           )}
         </div>
@@ -141,6 +165,18 @@ export const KanbanCard = ({ card, onDelete, onEdit }: KanbanCardProps) => {
             aria-label={`Edit ${card.title}`}
           >
             Edit
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onArchive(card.id);
+            }}
+            onPointerDown={(e) => e.stopPropagation()}
+            className="rounded-full border border-transparent px-2 py-1 text-xs font-semibold text-[var(--gray-text)] transition hover:border-[var(--stroke)] hover:text-amber-600"
+            aria-label={`Archive ${card.title}`}
+          >
+            Archive
           </button>
           <button
             type="button"

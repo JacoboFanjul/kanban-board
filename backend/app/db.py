@@ -84,6 +84,17 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE cards ADD COLUMN due_date TEXT")
     if "label" not in card_cols:
         conn.execute("ALTER TABLE cards ADD COLUMN label TEXT")
+    if "priority" not in card_cols:
+        conn.execute("ALTER TABLE cards ADD COLUMN priority TEXT")
+    if "archived" not in card_cols:
+        conn.execute("ALTER TABLE cards ADD COLUMN archived INTEGER NOT NULL DEFAULT 0")
+    if "created_at" not in card_cols:
+        conn.execute("ALTER TABLE cards ADD COLUMN created_at TEXT")
+
+    # Add wip_limit to columns if missing
+    col_cols = {r[1] for r in conn.execute("PRAGMA table_info(columns)").fetchall()}
+    if "wip_limit" not in col_cols:
+        conn.execute("ALTER TABLE columns ADD COLUMN wip_limit INTEGER")
 
     # Add email column to users if missing
     user_cols = {r[1] for r in conn.execute("PRAGMA table_info(users)").fetchall()}
@@ -113,21 +124,25 @@ def init_db() -> None:
     """)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS columns (
-            id       TEXT PRIMARY KEY,
-            board_id TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
-            title    TEXT NOT NULL,
-            position INTEGER NOT NULL
+            id        TEXT PRIMARY KEY,
+            board_id  TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+            title     TEXT NOT NULL,
+            position  INTEGER NOT NULL,
+            wip_limit INTEGER
         )
     """)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS cards (
-            id        TEXT PRIMARY KEY,
-            column_id TEXT NOT NULL REFERENCES columns(id) ON DELETE CASCADE,
-            title     TEXT NOT NULL,
-            details   TEXT NOT NULL DEFAULT '',
-            position  INTEGER NOT NULL,
-            due_date  TEXT,
-            label     TEXT
+            id         TEXT PRIMARY KEY,
+            column_id  TEXT NOT NULL REFERENCES columns(id) ON DELETE CASCADE,
+            title      TEXT NOT NULL,
+            details    TEXT NOT NULL DEFAULT '',
+            position   INTEGER NOT NULL,
+            due_date   TEXT,
+            label      TEXT,
+            priority   TEXT,
+            archived   INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT
         )
     """)
     conn.commit()
@@ -144,11 +159,14 @@ def init_db() -> None:
     conn.execute("INSERT INTO users VALUES (?, ?, ?)", ("user", hash_password("password"), None))
     conn.execute("INSERT INTO boards VALUES (?, ?, ?, ?)", (board_id, "user", "My Board", now))
     for col_id, title, pos in _SEED_COLUMNS:
-        conn.execute("INSERT INTO columns VALUES (?, ?, ?, ?)", (col_id, board_id, title, pos))
+        conn.execute(
+            "INSERT INTO columns(id, board_id, title, position) VALUES (?, ?, ?, ?)",
+            (col_id, board_id, title, pos),
+        )
     for card_id, col_id, title, details, pos in _SEED_CARDS:
         conn.execute(
-            "INSERT INTO cards(id, column_id, title, details, position) VALUES (?, ?, ?, ?, ?)",
-            (card_id, col_id, title, details, pos),
+            "INSERT INTO cards(id, column_id, title, details, position, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (card_id, col_id, title, details, pos, now),
         )
     conn.commit()
     conn.close()
@@ -268,18 +286,20 @@ def get_board(username: str, board_id: str | None = None) -> dict:
             "SELECT id, title FROM boards WHERE id = ?", (bid,)
         ).fetchone()
         cols = conn.execute(
-            "SELECT id, title FROM columns WHERE board_id = ? ORDER BY position",
+            "SELECT id, title, wip_limit FROM columns WHERE board_id = ? ORDER BY position",
             (bid,),
         ).fetchall()
         result = []
         for col in cols:
             cards = conn.execute(
-                "SELECT id, title, details, due_date, label FROM cards WHERE column_id = ? ORDER BY position",
+                "SELECT id, title, details, due_date, label, priority, created_at "
+                "FROM cards WHERE column_id = ? AND archived = 0 ORDER BY position",
                 (col["id"],),
             ).fetchall()
             result.append({
                 "id": col["id"],
                 "title": col["title"],
+                "wip_limit": col["wip_limit"],
                 "cards": [dict(c) for c in cards],
             })
         return {
@@ -287,6 +307,93 @@ def get_board(username: str, board_id: str | None = None) -> dict:
             "title": board_row["title"],
             "columns": result,
         }
+
+
+def search_cards(username: str, board_id: str, q: str = "", label: str = "", priority: str = "") -> list[dict]:
+    with get_conn() as conn:
+        if not _board_owned_by(conn, username, board_id):
+            return []
+        conditions = [
+            "cards.archived = 0",
+            "columns.board_id = ?",
+        ]
+        params: list = [board_id]
+        if q:
+            conditions.append("(cards.title LIKE ? OR cards.details LIKE ?)")
+            params += [f"%{q}%", f"%{q}%"]
+        if label:
+            conditions.append("cards.label = ?")
+            params.append(label)
+        if priority:
+            conditions.append("cards.priority = ?")
+            params.append(priority)
+        where = " AND ".join(conditions)
+        rows = conn.execute(
+            f"""
+            SELECT cards.id, cards.title, cards.details, cards.due_date,
+                   cards.label, cards.priority, cards.created_at,
+                   cards.column_id, columns.title AS column_title
+            FROM cards
+            JOIN columns ON cards.column_id = columns.id
+            WHERE {where}
+            ORDER BY columns.position, cards.position
+            """,
+            params,
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_archived_cards(username: str, board_id: str) -> list[dict]:
+    with get_conn() as conn:
+        if not _board_owned_by(conn, username, board_id):
+            return []
+        rows = conn.execute(
+            """
+            SELECT cards.id, cards.title, cards.details, cards.due_date,
+                   cards.label, cards.priority, cards.created_at,
+                   cards.column_id, columns.title AS column_title
+            FROM cards
+            JOIN columns ON cards.column_id = columns.id
+            WHERE columns.board_id = ? AND cards.archived = 1
+            ORDER BY cards.rowid DESC
+            """,
+            (board_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def archive_card(username: str, card_id: str) -> bool:
+    with get_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT cards.id FROM cards
+            JOIN columns ON cards.column_id = columns.id
+            JOIN boards ON columns.board_id = boards.id
+            WHERE cards.id = ? AND boards.username = ?
+            """,
+            (card_id, username),
+        ).fetchone()
+        if not row:
+            return False
+        conn.execute("UPDATE cards SET archived = 1 WHERE id = ?", (card_id,))
+        return True
+
+
+def unarchive_card(username: str, card_id: str) -> bool:
+    with get_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT cards.id FROM cards
+            JOIN columns ON cards.column_id = columns.id
+            JOIN boards ON columns.board_id = boards.id
+            WHERE cards.id = ? AND boards.username = ?
+            """,
+            (card_id, username),
+        ).fetchone()
+        if not row:
+            return False
+        conn.execute("UPDATE cards SET archived = 0 WHERE id = ?", (card_id,))
+        return True
 
 
 # ---------------------------------------------------------------------------
@@ -320,7 +427,19 @@ def create_column(username: str, board_id: str, title: str) -> dict | None:
             "INSERT INTO columns(id, board_id, title, position) VALUES (?, ?, ?, ?)",
             (col_id, board_id, title, position),
         )
-        return {"id": col_id, "title": title, "position": position}
+        return {"id": col_id, "title": title, "position": position, "wip_limit": None}
+
+
+def set_column_wip_limit(username: str, column_id: str, wip_limit: int | None) -> bool:
+    with get_conn() as conn:
+        result = conn.execute(
+            """
+            UPDATE columns SET wip_limit = ?
+            WHERE id = ? AND board_id IN (SELECT id FROM boards WHERE username = ?)
+            """,
+            (wip_limit, column_id, username),
+        )
+        return result.rowcount == 1
 
 
 def delete_column(username: str, column_id: str) -> bool:
@@ -396,7 +515,7 @@ def move_column(username: str, column_id: str, target_position: int) -> bool:
 
 def create_card(
     username: str, column_id: str, title: str, details: str,
-    due_date: str | None = None, label: str | None = None,
+    due_date: str | None = None, label: str | None = None, priority: str | None = None,
 ) -> dict | None:
     with get_conn() as conn:
         col = conn.execute(
@@ -410,17 +529,21 @@ def create_card(
         if not col:
             return None
         max_pos = conn.execute(
-            "SELECT COALESCE(MAX(position), -1) FROM cards WHERE column_id = ?",
+            "SELECT COALESCE(MAX(position), -1) FROM cards WHERE column_id = ? AND archived = 0",
             (column_id,),
         ).fetchone()[0]
         card_id = secrets.token_hex(8)
         position = max_pos + 1
+        now = datetime.now(timezone.utc).isoformat()
         conn.execute(
-            "INSERT INTO cards(id, column_id, title, details, position, due_date, label) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (card_id, column_id, title, details, position, due_date, label),
+            "INSERT INTO cards(id, column_id, title, details, position, due_date, label, priority, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (card_id, column_id, title, details, position, due_date, label, priority, now),
         )
-        return {"id": card_id, "title": title, "details": details, "due_date": due_date, "label": label}
+        return {
+            "id": card_id, "title": title, "details": details,
+            "due_date": due_date, "label": label, "priority": priority, "created_at": now,
+        }
 
 
 def update_card(
@@ -429,6 +552,7 @@ def update_card(
     details: str | None = None,
     due_date: str | None = None,
     label: str | None = None,
+    priority: str | None = None,
 ) -> bool:
     with get_conn() as conn:
         row = conn.execute(
@@ -456,6 +580,9 @@ def update_card(
         if label is not None:
             updates.append("label = ?")
             params.append(label)
+        if priority is not None:
+            updates.append("priority = ?")
+            params.append(priority)
         if not updates:
             return True
         params.append(card_id)

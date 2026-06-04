@@ -20,8 +20,13 @@ vi.mock("@/lib/api", () => ({
   apiCreateColumn: vi.fn(),
   apiDeleteColumn: vi.fn(),
   apiMoveColumn: vi.fn(),
+  apiSetWipLimit: vi.fn(),
   apiCreateCard: vi.fn(),
   apiUpdateCard: vi.fn(),
+  apiArchiveCard: vi.fn(),
+  apiUnarchiveCard: vi.fn(),
+  apiGetArchivedCards: vi.fn(),
+  apiSearchCards: vi.fn(),
   apiDeleteCard: vi.fn(),
   apiMoveCard: vi.fn(),
   apiChangePassword: vi.fn(),
@@ -34,6 +39,9 @@ import {
   apiCreateCard,
   apiDeleteCard,
   apiUpdateCard,
+  apiArchiveCard,
+  apiGetArchivedCards,
+  apiSearchCards,
 } from "@/lib/api";
 
 const mockBoardSummaries = [
@@ -47,14 +55,15 @@ const mockBoard = {
     {
       id: "col-backlog",
       title: "Backlog",
+      wip_limit: null,
       cards: [
-        { id: "card-1", title: "Card One", details: "Details", due_date: null, label: null },
+        { id: "card-1", title: "Card One", details: "Details", due_date: null, label: null, priority: null, created_at: null },
       ],
     },
-    { id: "col-discovery", title: "Discovery", cards: [] },
-    { id: "col-progress", title: "In Progress", cards: [] },
-    { id: "col-review", title: "Review", cards: [] },
-    { id: "col-done", title: "Done", cards: [] },
+    { id: "col-discovery", title: "Discovery", wip_limit: null, cards: [] },
+    { id: "col-progress", title: "In Progress", wip_limit: null, cards: [] },
+    { id: "col-review", title: "Review", wip_limit: null, cards: [] },
+    { id: "col-done", title: "Done", wip_limit: null, cards: [] },
   ],
 };
 
@@ -68,9 +77,14 @@ beforeEach(() => {
     details: "Notes",
     due_date: null,
     label: null,
+    priority: null,
+    created_at: "2026-01-01T00:00:00Z",
   });
   vi.mocked(apiUpdateCard).mockResolvedValue(undefined);
   vi.mocked(apiDeleteCard).mockResolvedValue(undefined);
+  vi.mocked(apiArchiveCard).mockResolvedValue(undefined);
+  vi.mocked(apiGetArchivedCards).mockResolvedValue([]);
+  vi.mocked(apiSearchCards).mockResolvedValue([]);
 });
 
 const renderBoard = () =>
@@ -129,6 +143,41 @@ describe("KanbanBoard", () => {
     expect(within(column).queryByText("Card One")).not.toBeInTheDocument();
     await waitFor(() => {
       expect(vi.mocked(apiDeleteCard)).toHaveBeenCalledWith("test-token", "card-1");
+    });
+  });
+
+  it("archives a card optimistically and calls API", async () => {
+    renderBoard();
+    const column = (await screen.findAllByTestId(/column-/i))[0];
+    await screen.findByText("Card One");
+    await userEvent.click(
+      within(column).getByRole("button", { name: /archive card one/i }),
+    );
+    expect(within(column).queryByText("Card One")).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(vi.mocked(apiArchiveCard)).toHaveBeenCalledWith("test-token", "card-1");
+    });
+  });
+
+  it("shows search results when typing in the search bar", async () => {
+    vi.mocked(apiSearchCards).mockResolvedValue([
+      {
+        id: "card-1",
+        title: "Card One",
+        details: "Details",
+        due_date: null,
+        label: null,
+        priority: null,
+        created_at: null,
+        column_id: "col-backlog",
+        column_title: "Backlog",
+      },
+    ]);
+    renderBoard();
+    await screen.findAllByTestId(/column-/i);
+    await userEvent.type(screen.getByPlaceholderText(/search cards/i), "card");
+    await waitFor(() => {
+      expect(vi.mocked(apiSearchCards)).toHaveBeenCalledWith("test-token", "board-1", { q: "card" });
     });
   });
 

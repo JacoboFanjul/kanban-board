@@ -13,7 +13,9 @@ type KanbanColumnProps = {
   onAddCard: (columnId: string, title: string, details: string) => void;
   onDeleteCard: (columnId: string, cardId: string) => void;
   onEditCard: (cardId: string, title: string, details: string) => void;
+  onArchiveCard: (columnId: string, cardId: string) => void;
   onDeleteColumn: (columnId: string) => void;
+  onEditWipLimit: (columnId: string) => void;
 };
 
 export const KanbanColumn = ({
@@ -24,7 +26,9 @@ export const KanbanColumn = ({
   onAddCard,
   onDeleteCard,
   onEditCard,
+  onArchiveCard,
   onDeleteColumn,
+  onEditWipLimit,
 }: KanbanColumnProps) => {
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
 
@@ -41,8 +45,18 @@ export const KanbanColumn = ({
         <div className="w-full">
           <div className="flex items-center gap-3">
             <div className="h-2 w-10 rounded-full bg-[var(--accent-yellow)]" />
-            <span className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--gray-text)]">
+            <span
+              className={clsx(
+                "text-xs font-semibold uppercase tracking-[0.2em]",
+                column.wip_limit !== null && cards.length >= column.wip_limit
+                  ? "text-red-500"
+                  : "text-[var(--gray-text)]",
+              )}
+            >
               {cards.length} cards
+              {column.wip_limit !== null && (
+                <span className="ml-1">/ {column.wip_limit}</span>
+              )}
             </span>
           </div>
           <input
@@ -52,6 +66,14 @@ export const KanbanColumn = ({
             className="mt-3 w-full bg-transparent font-display text-lg font-semibold text-[var(--navy-dark)] outline-none"
             aria-label="Column title"
           />
+          <button
+            type="button"
+            onClick={() => onEditWipLimit(column.id)}
+            className="mt-1 text-xs text-[var(--gray-text)] transition hover:text-[var(--primary-blue)]"
+            title="Set WIP limit"
+          >
+            {column.wip_limit !== null ? `WIP: ${column.wip_limit}` : "Set WIP limit"}
+          </button>
         </div>
         <button
           type="button"
@@ -71,6 +93,7 @@ export const KanbanColumn = ({
               card={card}
               onDelete={(cardId) => onDeleteCard(column.id, cardId)}
               onEdit={onEditCard}
+              onArchive={(cardId) => onArchiveCard(column.id, cardId)}
             />
           ))}
         </SortableContext>

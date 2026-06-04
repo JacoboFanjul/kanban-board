@@ -35,6 +35,7 @@ class CreateCardRequest(BaseModel):
     details: str = ""
     due_date: str | None = None
     label: str | None = None
+    priority: str | None = None
 
 
 class UpdateCardRequest(BaseModel):
@@ -42,6 +43,11 @@ class UpdateCardRequest(BaseModel):
     details: str | None = None
     due_date: str | None = None
     label: str | None = None
+    priority: str | None = None
+
+
+class WipLimitRequest(BaseModel):
+    wip_limit: int | None = None
 
 
 class MoveCardRequest(BaseModel):
@@ -153,9 +159,39 @@ def move_column(
     return {"ok": True}
 
 
+@router.put("/board/columns/{column_id}/wip-limit")
+def set_wip_limit(
+    column_id: str,
+    body: WipLimitRequest,
+    username: Annotated[str, Depends(require_auth)],
+):
+    if not db.set_column_wip_limit(username, column_id, body.wip_limit):
+        raise HTTPException(status_code=404, detail="Column not found")
+    return {"ok": True}
+
+
 # ---------------------------------------------------------------------------
 # Card routes
 # ---------------------------------------------------------------------------
+
+@router.get("/boards/{board_id}/search")
+def search_cards(
+    board_id: str,
+    username: Annotated[str, Depends(require_auth)],
+    q: str = "",
+    label: str = "",
+    priority: str = "",
+):
+    return db.search_cards(username, board_id, q, label, priority)
+
+
+@router.get("/boards/{board_id}/archived")
+def get_archived_cards(
+    board_id: str,
+    username: Annotated[str, Depends(require_auth)],
+):
+    return db.get_archived_cards(username, board_id)
+
 
 @router.post("/board/cards", status_code=201)
 def create_card(
@@ -164,7 +200,7 @@ def create_card(
 ):
     card = db.create_card(
         username, body.column_id, body.title, body.details,
-        body.due_date, body.label,
+        body.due_date, body.label, body.priority,
     )
     if not card:
         raise HTTPException(status_code=404, detail="Column not found")
@@ -177,7 +213,29 @@ def update_card(
     body: UpdateCardRequest,
     username: Annotated[str, Depends(require_auth)],
 ):
-    if not db.update_card(username, card_id, body.title, body.details, body.due_date, body.label):
+    if not db.update_card(
+        username, card_id, body.title, body.details, body.due_date, body.label, body.priority
+    ):
+        raise HTTPException(status_code=404, detail="Card not found")
+    return {"ok": True}
+
+
+@router.post("/board/cards/{card_id}/archive", status_code=200)
+def archive_card(
+    card_id: str,
+    username: Annotated[str, Depends(require_auth)],
+):
+    if not db.archive_card(username, card_id):
+        raise HTTPException(status_code=404, detail="Card not found")
+    return {"ok": True}
+
+
+@router.post("/board/cards/{card_id}/unarchive", status_code=200)
+def unarchive_card(
+    card_id: str,
+    username: Annotated[str, Depends(require_auth)],
+):
+    if not db.unarchive_card(username, card_id):
         raise HTTPException(status_code=404, detail="Card not found")
     return {"ok": True}
 
