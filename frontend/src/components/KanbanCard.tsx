@@ -3,6 +3,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import clsx from "clsx";
 import type { Card } from "@/lib/kanban";
+import { CardComments } from "@/components/CardComments";
 
 const LABEL_COLORS: Record<string, string> = {
   urgent: "bg-red-100 text-red-700",
@@ -26,18 +27,21 @@ function isOverdue(due_date: string | null): boolean {
 
 type KanbanCardProps = {
   card: Card;
+  token: string;
+  username: string;
   onDelete: (cardId: string) => void;
   onEdit: (cardId: string, title: string, details: string) => void;
   onArchive: (cardId: string) => void;
 };
 
-export const KanbanCard = ({ card, onDelete, onEdit, onArchive }: KanbanCardProps) => {
+export const KanbanCard = ({ card, token, username, onDelete, onEdit, onArchive }: KanbanCardProps) => {
   const [editing, setEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(card.title);
   const [editDetails, setEditDetails] = useState(card.details);
+  const [showComments, setShowComments] = useState(false);
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: card.id });
+    useSortable({ id: card.id, data: { type: "card" } });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -47,9 +51,7 @@ export const KanbanCard = ({ card, onDelete, onEdit, onArchive }: KanbanCardProp
   const handleEditSave = () => {
     const t = editTitle.trim();
     const d = editDetails.trim();
-    if (t) {
-      onEdit(card.id, t, d);
-    }
+    if (t) onEdit(card.id, t, d);
     setEditing(false);
   };
 
@@ -86,6 +88,7 @@ export const KanbanCard = ({ card, onDelete, onEdit, onArchive }: KanbanCardProp
             className="w-full resize-none rounded-lg border border-[var(--stroke)] bg-[var(--surface)] px-3 py-2 text-xs text-[var(--gray-text)] outline-none focus:border-[var(--primary-blue)]"
             placeholder="Details"
           />
+          <CardComments token={token} cardId={card.id} username={username} />
           <div className="flex gap-2">
             <button
               type="button"
@@ -99,7 +102,7 @@ export const KanbanCard = ({ card, onDelete, onEdit, onArchive }: KanbanCardProp
               onClick={handleEditCancel}
               className="rounded-full border border-[var(--stroke)] px-3 py-1 text-xs font-semibold text-[var(--gray-text)] transition hover:text-[var(--navy-dark)]"
             >
-              Cancel
+              Close
             </button>
           </div>
         </div>
@@ -115,7 +118,7 @@ export const KanbanCard = ({ card, onDelete, onEdit, onArchive }: KanbanCardProp
         "rounded-2xl border border-transparent bg-white px-4 py-4 shadow-[0_12px_24px_rgba(3,33,71,0.08)]",
         "transition-all duration-150",
         isDragging && "opacity-60 shadow-[0_18px_32px_rgba(3,33,71,0.16)]",
-      overdue && !isDragging && "border border-red-200 bg-red-50",
+        overdue && !isDragging && "border border-red-200 bg-red-50",
       )}
       {...attributes}
       {...listeners}
@@ -125,12 +128,7 @@ export const KanbanCard = ({ card, onDelete, onEdit, onArchive }: KanbanCardProp
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
             {labelClass && (
-              <span
-                className={clsx(
-                  "inline-block rounded-full px-2 py-0.5 text-xs font-semibold capitalize",
-                  labelClass,
-                )}
-              >
+              <span className={clsx("inline-block rounded-full px-2 py-0.5 text-xs font-semibold capitalize", labelClass)}>
                 {card.label}
               </span>
             )}
@@ -138,6 +136,11 @@ export const KanbanCard = ({ card, onDelete, onEdit, onArchive }: KanbanCardProp
               <span className={clsx("flex items-center gap-1 text-xs font-semibold capitalize", priorityCfg.color)}>
                 <span className={clsx("h-1.5 w-1.5 rounded-full", priorityCfg.dot)} />
                 {card.priority}
+              </span>
+            )}
+            {card.assigned_to && (
+              <span className="rounded-full bg-[var(--surface)] px-2 py-0.5 text-xs font-semibold text-[var(--navy-dark)]">
+                @{card.assigned_to}
               </span>
             )}
           </div>
@@ -152,14 +155,16 @@ export const KanbanCard = ({ card, onDelete, onEdit, onArchive }: KanbanCardProp
               {overdue ? "Overdue: " : "Due: "}{card.due_date}
             </p>
           )}
+          {showComments && (
+            <div onPointerDown={(e) => e.stopPropagation()}>
+              <CardComments token={token} cardId={card.id} username={username} />
+            </div>
+          )}
         </div>
         <div className="flex flex-col gap-1">
           <button
             type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setEditing(true);
-            }}
+            onClick={(e) => { e.stopPropagation(); setEditing(true); }}
             onPointerDown={(e) => e.stopPropagation()}
             className="rounded-full border border-transparent px-2 py-1 text-xs font-semibold text-[var(--primary-blue)] transition hover:border-[var(--stroke)]"
             aria-label={`Edit ${card.title}`}
@@ -168,10 +173,16 @@ export const KanbanCard = ({ card, onDelete, onEdit, onArchive }: KanbanCardProp
           </button>
           <button
             type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onArchive(card.id);
-            }}
+            onClick={(e) => { e.stopPropagation(); setShowComments((v) => !v); }}
+            onPointerDown={(e) => e.stopPropagation()}
+            className="rounded-full border border-transparent px-2 py-1 text-xs font-semibold text-[var(--gray-text)] transition hover:border-[var(--stroke)] hover:text-[var(--primary-blue)]"
+            aria-label={`Comments for ${card.title}`}
+          >
+            💬
+          </button>
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onArchive(card.id); }}
             onPointerDown={(e) => e.stopPropagation()}
             className="rounded-full border border-transparent px-2 py-1 text-xs font-semibold text-[var(--gray-text)] transition hover:border-[var(--stroke)] hover:text-amber-600"
             aria-label={`Archive ${card.title}`}
@@ -180,10 +191,7 @@ export const KanbanCard = ({ card, onDelete, onEdit, onArchive }: KanbanCardProp
           </button>
           <button
             type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete(card.id);
-            }}
+            onClick={(e) => { e.stopPropagation(); onDelete(card.id); }}
             onPointerDown={(e) => e.stopPropagation()}
             className="rounded-full border border-transparent px-2 py-1 text-xs font-semibold text-[var(--gray-text)] transition hover:border-[var(--stroke)] hover:text-[var(--navy-dark)]"
             aria-label={`Delete ${card.title}`}

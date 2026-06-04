@@ -1,6 +1,7 @@
 import clsx from "clsx";
 import { useDroppable } from "@dnd-kit/core";
-import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import type { Card, Column } from "@/lib/kanban";
 import { KanbanCard } from "@/components/KanbanCard";
 import { NewCardForm } from "@/components/NewCardForm";
@@ -8,6 +9,8 @@ import { NewCardForm } from "@/components/NewCardForm";
 type KanbanColumnProps = {
   column: Column;
   cards: Card[];
+  token: string;
+  username: string;
   onRename: (columnId: string, title: string) => void;
   onRenameCommit: (columnId: string, title: string) => void;
   onAddCard: (columnId: string, title: string, details: string) => void;
@@ -21,6 +24,8 @@ type KanbanColumnProps = {
 export const KanbanColumn = ({
   column,
   cards,
+  token,
+  username,
   onRename,
   onRenameCommit,
   onAddCard,
@@ -30,18 +35,49 @@ export const KanbanColumn = ({
   onDeleteColumn,
   onEditWipLimit,
 }: KanbanColumnProps) => {
-  const { setNodeRef, isOver } = useDroppable({ id: column.id });
+  const { setNodeRef: setDropRef, isOver } = useDroppable({ id: column.id });
+  const {
+    attributes: colAttrs,
+    listeners: colListeners,
+    setNodeRef: setSortRef,
+    transform,
+    transition,
+    isDragging: isColDragging,
+  } = useSortable({ id: column.id, data: { type: "column" } });
+
+  const colStyle = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  const setRef = (el: HTMLElement | null) => {
+    setDropRef(el);
+    setSortRef(el);
+  };
 
   return (
     <section
-      ref={setNodeRef}
+      ref={setRef}
+      style={colStyle}
       className={clsx(
         "flex min-h-[520px] flex-col rounded-3xl border border-[var(--stroke)] bg-[var(--surface-strong)] p-4 shadow-[var(--shadow)] transition",
+        isColDragging && "opacity-60",
         isOver && "ring-2 ring-[var(--accent-yellow)]",
       )}
       data-testid={`column-${column.id}`}
     >
       <div className="flex items-start justify-between gap-3">
+        {/* Column drag handle */}
+        <button
+          type="button"
+          {...colAttrs}
+          {...colListeners}
+          className="mt-1 shrink-0 cursor-grab rounded p-1 text-[var(--gray-text)] transition hover:text-[var(--navy-dark)] active:cursor-grabbing"
+          title="Drag to reorder column"
+          aria-label={`Drag column ${column.title}`}
+        >
+          ⠿
+        </button>
         <div className="w-full">
           <div className="flex items-center gap-3">
             <div className="h-2 w-10 rounded-full bg-[var(--accent-yellow)]" />
@@ -91,6 +127,8 @@ export const KanbanColumn = ({
             <KanbanCard
               key={card.id}
               card={card}
+              token={token}
+              username={username}
               onDelete={(cardId) => onDeleteCard(column.id, cardId)}
               onEdit={onEditCard}
               onArchive={(cardId) => onArchiveCard(column.id, cardId)}

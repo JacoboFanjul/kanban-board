@@ -11,6 +11,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
+import { SortableContext, arrayMove, horizontalListSortingStrategy } from "@dnd-kit/sortable";
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
 import { moveCard, type BoardData } from "@/lib/kanban";
@@ -24,6 +25,7 @@ import {
   apiRenameColumn,
   apiCreateColumn,
   apiDeleteColumn,
+  apiMoveColumn,
   apiSetWipLimit,
   apiCreateCard,
   apiUpdateCard,
@@ -32,6 +34,7 @@ import {
   apiSearchCards,
   apiDeleteCard,
   apiMoveCard,
+  apiExportBoard,
   apiChangePassword,
   type ApiBoard,
   type ApiBoardSummary,
@@ -150,13 +153,30 @@ export const KanbanBoard = ({ token, username, onLogout }: Props) => {
   const cardsById = useMemo(() => board?.cards ?? {}, [board?.cards]);
 
   const handleDragStart = (event: DragStartEvent) => {
-    setActiveCardId(event.active.id as string);
+    const isColumn = event.active.data.current?.type === "column";
+    if (!isColumn) setActiveCardId(event.active.id as string);
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     setActiveCardId(null);
     if (!over || active.id === over.id || !board) return;
+
+    const isColumn = active.data.current?.type === "column";
+
+    if (isColumn) {
+      const oldIndex = board.columns.findIndex((c) => c.id === active.id);
+      const newIndex = board.columns.findIndex((c) => c.id === over.id);
+      if (oldIndex === -1 || newIndex === -1) return;
+      const prevBoard = board;
+      const newColumns = arrayMove(board.columns, oldIndex, newIndex);
+      setBoard((prev) => (prev ? { ...prev, columns: newColumns } : prev));
+      apiMoveColumn(token, active.id as string, newIndex).catch((err: unknown) => {
+        if (err instanceof ApiError && err.status === 401) handle401();
+        else setBoard(prevBoard);
+      });
+      return;
+    }
 
     const activeId = active.id as string;
     const prevBoard = board;
@@ -259,6 +279,22 @@ export const KanbanBoard = ({ token, username, onLogout }: Props) => {
       if (err instanceof ApiError && err.status === 401) handle401();
       else setBoard(prevBoard);
     });
+  };
+
+  const handleExportBoard = async () => {
+    if (!activeBoardId) return;
+    try {
+      const data = await apiExportBoard(token, activeBoardId);
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${boardTitle.replace(/\s+/g, "-").toLowerCase()}-export.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) handle401();
+    }
   };
 
   const handleSearch = async (q: string) => {
@@ -665,6 +701,13 @@ export const KanbanBoard = ({ token, username, onLogout }: Props) => {
             >
               Archive
             </button>
+            <button
+              onClick={handleExportBoard}
+              className="rounded-xl border border-[var(--stroke)] bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.15em] text-[var(--gray-text)] transition hover:border-[var(--accent-yellow)] hover:text-[var(--navy-dark)]"
+              title="Export board as JSON"
+            >
+              Export
+            </button>
           </div>
 
           {/* Column pills */}
@@ -811,32 +854,39 @@ export const KanbanBoard = ({ token, username, onLogout }: Props) => {
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
           >
-            <section
-              className="grid gap-6"
-              style={{
-                gridTemplateColumns: `repeat(${Math.min(board.columns.length, 5)}, minmax(0, 1fr))`,
-              }}
+            <SortableContext
+              items={board.columns.map((c) => c.id)}
+              strategy={horizontalListSortingStrategy}
             >
-              {board.columns.map((column) => (
-                <KanbanColumn
-                  key={column.id}
-                  column={column}
-                  cards={column.cardIds.map((cardId) => board.cards[cardId]).filter(Boolean)}
-                  onRename={handleRenameColumn}
-                  onRenameCommit={handleRenameColumnCommit}
-                  onAddCard={handleAddCard}
-                  onDeleteCard={handleDeleteCard}
-                  onEditCard={handleEditCard}
-                  onArchiveCard={handleArchiveCard}
-                  onDeleteColumn={handleDeleteColumn}
-                  onEditWipLimit={(columnId) => {
-                    setWipEditingColId(columnId);
-                    const col = board.columns.find((c) => c.id === columnId);
-                    setWipInputValue(col?.wip_limit?.toString() ?? "");
-                  }}
-                />
-              ))}
-            </section>
+              <section
+                className="grid gap-6"
+                style={{
+                  gridTemplateColumns: `repeat(${Math.min(board.columns.length, 5)}, minmax(0, 1fr))`,
+                }}
+              >
+                {board.columns.map((column) => (
+                  <KanbanColumn
+                    key={column.id}
+                    column={column}
+                    cards={column.cardIds.map((cardId) => board.cards[cardId]).filter(Boolean)}
+                    token={token}
+                    username={username}
+                    onRename={handleRenameColumn}
+                    onRenameCommit={handleRenameColumnCommit}
+                    onAddCard={handleAddCard}
+                    onDeleteCard={handleDeleteCard}
+                    onEditCard={handleEditCard}
+                    onArchiveCard={handleArchiveCard}
+                    onDeleteColumn={handleDeleteColumn}
+                    onEditWipLimit={(columnId) => {
+                      setWipEditingColId(columnId);
+                      const col = board.columns.find((c) => c.id === columnId);
+                      setWipInputValue(col?.wip_limit?.toString() ?? "");
+                    }}
+                  />
+                ))}
+              </section>
+            </SortableContext>
             <DragOverlay>
               {activeCard ? (
                 <div className="w-[260px]">

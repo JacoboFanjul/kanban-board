@@ -6,6 +6,15 @@ export type ApiCard = {
   label: string | null;
   priority: string | null;
   created_at: string | null;
+  assigned_to: string | null;
+};
+
+export type ApiComment = {
+  id: string;
+  card_id: string;
+  username: string;
+  content: string;
+  created_at: string;
 };
 
 export type ApiCardSearchResult = ApiCard & {
@@ -345,6 +354,52 @@ export async function apiMoveCard(
       body: JSON.stringify({ column_id: columnId, position }),
     }),
   );
+}
+
+// ---------------------------------------------------------------------------
+// Card comments
+// ---------------------------------------------------------------------------
+
+export async function apiGetComments(token: string, cardId: string): Promise<ApiComment[]> {
+  const res = await checked(
+    await fetch(`/api/board/cards/${cardId}/comments`, { headers: authHeaders(token) }),
+  );
+  return res.json() as Promise<ApiComment[]>;
+}
+
+export async function apiCreateComment(
+  token: string,
+  cardId: string,
+  content: string,
+): Promise<ApiComment> {
+  const res = await checked(
+    await fetch(`/api/board/cards/${cardId}/comments`, {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify({ content }),
+    }),
+  );
+  return res.json() as Promise<ApiComment>;
+}
+
+export async function apiDeleteComment(token: string, commentId: string): Promise<void> {
+  await checked(
+    await fetch(`/api/board/comments/${commentId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Board export
+// ---------------------------------------------------------------------------
+
+export async function apiExportBoard(token: string, boardId: string): Promise<unknown> {
+  const res = await checked(
+    await fetch(`/api/boards/${boardId}/export`, { headers: authHeaders(token) }),
+  );
+  return res.json();
 }
 
 // ---------------------------------------------------------------------------

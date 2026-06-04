@@ -36,6 +36,7 @@ class CreateCardRequest(BaseModel):
     due_date: str | None = None
     label: str | None = None
     priority: str | None = None
+    assigned_to: str | None = None
 
 
 class UpdateCardRequest(BaseModel):
@@ -44,6 +45,11 @@ class UpdateCardRequest(BaseModel):
     due_date: str | None = None
     label: str | None = None
     priority: str | None = None
+    assigned_to: str | None = None
+
+
+class CreateCommentRequest(BaseModel):
+    content: str
 
 
 class WipLimitRequest(BaseModel):
@@ -200,7 +206,7 @@ def create_card(
 ):
     card = db.create_card(
         username, body.column_id, body.title, body.details,
-        body.due_date, body.label, body.priority,
+        body.due_date, body.label, body.priority, body.assigned_to,
     )
     if not card:
         raise HTTPException(status_code=404, detail="Column not found")
@@ -214,7 +220,8 @@ def update_card(
     username: Annotated[str, Depends(require_auth)],
 ):
     if not db.update_card(
-        username, card_id, body.title, body.details, body.due_date, body.label, body.priority
+        username, card_id, body.title, body.details,
+        body.due_date, body.label, body.priority, body.assigned_to,
     ):
         raise HTTPException(status_code=404, detail="Card not found")
     return {"ok": True}
@@ -238,6 +245,56 @@ def unarchive_card(
     if not db.unarchive_card(username, card_id):
         raise HTTPException(status_code=404, detail="Card not found")
     return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# Card comments
+# ---------------------------------------------------------------------------
+
+@router.get("/board/cards/{card_id}/comments")
+def get_comments(
+    card_id: str,
+    username: Annotated[str, Depends(require_auth)],
+):
+    return db.get_card_comments(username, card_id)
+
+
+@router.post("/board/cards/{card_id}/comments", status_code=201)
+def create_comment(
+    card_id: str,
+    body: CreateCommentRequest,
+    username: Annotated[str, Depends(require_auth)],
+):
+    if not body.content.strip():
+        raise HTTPException(status_code=422, detail="Comment content cannot be empty")
+    comment = db.create_comment(username, card_id, body.content.strip())
+    if not comment:
+        raise HTTPException(status_code=404, detail="Card not found")
+    return comment
+
+
+@router.delete("/board/comments/{comment_id}", status_code=204)
+def delete_comment(
+    comment_id: str,
+    username: Annotated[str, Depends(require_auth)],
+):
+    if not db.delete_comment(username, comment_id):
+        raise HTTPException(status_code=404, detail="Comment not found")
+
+
+# ---------------------------------------------------------------------------
+# Board export
+# ---------------------------------------------------------------------------
+
+@router.get("/boards/{board_id}/export")
+def export_board(
+    board_id: str,
+    username: Annotated[str, Depends(require_auth)],
+):
+    data = db.export_board(username, board_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Board not found")
+    return data
 
 
 @router.delete("/board/cards/{card_id}", status_code=204)

@@ -27,9 +27,13 @@ vi.mock("@/lib/api", () => ({
   apiUnarchiveCard: vi.fn(),
   apiGetArchivedCards: vi.fn(),
   apiSearchCards: vi.fn(),
+  apiExportBoard: vi.fn(),
   apiDeleteCard: vi.fn(),
   apiMoveCard: vi.fn(),
   apiChangePassword: vi.fn(),
+  apiGetComments: vi.fn().mockResolvedValue([]),
+  apiCreateComment: vi.fn(),
+  apiDeleteComment: vi.fn(),
 }));
 
 import {
@@ -42,6 +46,8 @@ import {
   apiArchiveCard,
   apiGetArchivedCards,
   apiSearchCards,
+  apiExportBoard,
+  apiGetComments,
 } from "@/lib/api";
 
 const mockBoardSummaries = [
@@ -57,7 +63,7 @@ const mockBoard = {
       title: "Backlog",
       wip_limit: null,
       cards: [
-        { id: "card-1", title: "Card One", details: "Details", due_date: null, label: null, priority: null, created_at: null },
+        { id: "card-1", title: "Card One", details: "Details", due_date: null, label: null, priority: null, created_at: null, assigned_to: null },
       ],
     },
     { id: "col-discovery", title: "Discovery", wip_limit: null, cards: [] },
@@ -79,12 +85,15 @@ beforeEach(() => {
     label: null,
     priority: null,
     created_at: "2026-01-01T00:00:00Z",
+    assigned_to: null,
   });
   vi.mocked(apiUpdateCard).mockResolvedValue(undefined);
   vi.mocked(apiDeleteCard).mockResolvedValue(undefined);
   vi.mocked(apiArchiveCard).mockResolvedValue(undefined);
   vi.mocked(apiGetArchivedCards).mockResolvedValue([]);
   vi.mocked(apiSearchCards).mockResolvedValue([]);
+  vi.mocked(apiExportBoard).mockResolvedValue({ board: { id: "board-1", title: "My Board" }, columns: [], exported_at: "2026-01-01T00:00:00Z" });
+  vi.mocked(apiGetComments).mockResolvedValue([]);
 });
 
 const renderBoard = () =>
@@ -179,6 +188,48 @@ describe("KanbanBoard", () => {
     await waitFor(() => {
       expect(vi.mocked(apiSearchCards)).toHaveBeenCalledWith("test-token", "board-1", { q: "card" });
     });
+  });
+
+  it("shows assigned_to badge when card has an assignee", async () => {
+    vi.mocked(apiGetBoard).mockResolvedValue({
+      ...mockBoard,
+      columns: [
+        {
+          ...mockBoard.columns[0],
+          cards: [{ ...mockBoard.columns[0].cards[0], assigned_to: "alice" }],
+        },
+        ...mockBoard.columns.slice(1),
+      ],
+    });
+    renderBoard();
+    expect(await screen.findByText("@alice")).toBeInTheDocument();
+  });
+
+  it("calls apiExportBoard when Export button is clicked", async () => {
+    // Mock URL.createObjectURL and document.createElement for download
+    const mockCreateObjectURL = vi.fn().mockReturnValue("blob:mock");
+    const mockRevokeObjectURL = vi.fn();
+    const mockClick = vi.fn();
+    URL.createObjectURL = mockCreateObjectURL;
+    URL.revokeObjectURL = mockRevokeObjectURL;
+    const origCreate = document.createElement.bind(document);
+    vi.spyOn(document, "createElement").mockImplementation((tag: string) => {
+      if (tag === "a") {
+        const el = origCreate("a");
+        el.click = mockClick;
+        return el;
+      }
+      return origCreate(tag);
+    });
+
+    renderBoard();
+    await screen.findAllByTestId(/column-/i);
+    await userEvent.click(screen.getByRole("button", { name: /export/i }));
+    await waitFor(() => {
+      expect(vi.mocked(apiExportBoard)).toHaveBeenCalledWith("test-token", "board-1");
+    });
+    expect(mockClick).toHaveBeenCalled();
+    vi.restoreAllMocks();
   });
 
   it("enters card edit mode and saves via API", async () => {
