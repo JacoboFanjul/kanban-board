@@ -12,6 +12,8 @@ type KanbanColumnProps = {
   onRenameCommit: (columnId: string, title: string) => void;
   onAddCard: (columnId: string, title: string, details: string) => void;
   onDeleteCard: (columnId: string, cardId: string) => void;
+  onEditCard: (cardId: string, title: string, details: string) => void;
+  onDeleteColumn: (columnId: string) => void;
 };
 
 export const KanbanColumn = ({
@@ -21,6 +23,8 @@ export const KanbanColumn = ({
   onRenameCommit,
   onAddCard,
   onDeleteCard,
+  onEditCard,
+  onDeleteColumn,
 }: KanbanColumnProps) => {
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
 
@@ -29,7 +33,7 @@ export const KanbanColumn = ({
       ref={setNodeRef}
       className={clsx(
         "flex min-h-[520px] flex-col rounded-3xl border border-[var(--stroke)] bg-[var(--surface-strong)] p-4 shadow-[var(--shadow)] transition",
-        isOver && "ring-2 ring-[var(--accent-yellow)]"
+        isOver && "ring-2 ring-[var(--accent-yellow)]",
       )}
       data-testid={`column-${column.id}`}
     >
@@ -49,6 +53,15 @@ export const KanbanColumn = ({
             aria-label="Column title"
           />
         </div>
+        <button
+          type="button"
+          onClick={() => onDeleteColumn(column.id)}
+          className="mt-1 shrink-0 rounded-full border border-transparent p-1 text-xs text-[var(--gray-text)] transition hover:border-red-200 hover:text-red-500"
+          title="Delete column"
+          aria-label={`Delete column ${column.title}`}
+        >
+          ✕
+        </button>
       </div>
       <div className="mt-4 flex flex-1 flex-col gap-3">
         <SortableContext items={column.cardIds} strategy={verticalListSortingStrategy}>
@@ -57,6 +70,7 @@ export const KanbanColumn = ({
               key={card.id}
               card={card}
               onDelete={(cardId) => onDeleteCard(column.id, cardId)}
+              onEdit={onEditCard}
             />
           ))}
         </SortableContext>
@@ -66,9 +80,7 @@ export const KanbanColumn = ({
           </div>
         )}
       </div>
-      <NewCardForm
-        onAdd={(title, details) => onAddCard(column.id, title, details)}
-      />
+      <NewCardForm onAdd={(title, details) => onAddCard(column.id, title, details)} />
     </section>
   );
 };

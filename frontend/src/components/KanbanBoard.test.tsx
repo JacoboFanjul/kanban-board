@@ -11,26 +11,45 @@ vi.mock("@/lib/api", () => ({
       this.status = status;
     }
   },
+  apiListBoards: vi.fn(),
   apiGetBoard: vi.fn(),
+  apiCreateBoard: vi.fn(),
+  apiRenameBoard: vi.fn(),
+  apiDeleteBoard: vi.fn(),
   apiRenameColumn: vi.fn(),
+  apiCreateColumn: vi.fn(),
+  apiDeleteColumn: vi.fn(),
+  apiMoveColumn: vi.fn(),
   apiCreateCard: vi.fn(),
+  apiUpdateCard: vi.fn(),
   apiDeleteCard: vi.fn(),
   apiMoveCard: vi.fn(),
+  apiChangePassword: vi.fn(),
 }));
 
 import {
+  apiListBoards,
   apiGetBoard,
   apiRenameColumn,
   apiCreateCard,
   apiDeleteCard,
+  apiUpdateCard,
 } from "@/lib/api";
 
+const mockBoardSummaries = [
+  { id: "board-1", title: "My Board", created_at: "2026-01-01T00:00:00Z" },
+];
+
 const mockBoard = {
+  id: "board-1",
+  title: "My Board",
   columns: [
     {
       id: "col-backlog",
       title: "Backlog",
-      cards: [{ id: "card-1", title: "Card One", details: "Details" }],
+      cards: [
+        { id: "card-1", title: "Card One", details: "Details", due_date: null, label: null },
+      ],
     },
     { id: "col-discovery", title: "Discovery", cards: [] },
     { id: "col-progress", title: "In Progress", cards: [] },
@@ -40,17 +59,22 @@ const mockBoard = {
 };
 
 beforeEach(() => {
+  vi.mocked(apiListBoards).mockResolvedValue(mockBoardSummaries);
   vi.mocked(apiGetBoard).mockResolvedValue(mockBoard);
   vi.mocked(apiRenameColumn).mockResolvedValue(undefined);
   vi.mocked(apiCreateCard).mockResolvedValue({
     id: "card-new",
     title: "New card",
     details: "Notes",
+    due_date: null,
+    label: null,
   });
+  vi.mocked(apiUpdateCard).mockResolvedValue(undefined);
   vi.mocked(apiDeleteCard).mockResolvedValue(undefined);
 });
 
-const renderBoard = () => render(<KanbanBoard token="test-token" />);
+const renderBoard = () =>
+  render(<KanbanBoard token="test-token" username="user" />);
 
 describe("KanbanBoard", () => {
   it("renders five columns after loading", async () => {
@@ -107,5 +131,24 @@ describe("KanbanBoard", () => {
       expect(vi.mocked(apiDeleteCard)).toHaveBeenCalledWith("test-token", "card-1");
     });
   });
-});
 
+  it("enters card edit mode and saves via API", async () => {
+    renderBoard();
+    const column = (await screen.findAllByTestId(/column-/i))[0];
+    await screen.findByText("Card One");
+    await userEvent.click(
+      within(column).getByRole("button", { name: /edit card one/i }),
+    );
+    const titleInput = within(column).getByPlaceholderText(/card title/i);
+    await userEvent.clear(titleInput);
+    await userEvent.type(titleInput, "Updated Title");
+    await userEvent.click(within(column).getByRole("button", { name: /save/i }));
+    await waitFor(() => {
+      expect(vi.mocked(apiUpdateCard)).toHaveBeenCalledWith(
+        "test-token",
+        "card-1",
+        expect.objectContaining({ title: "Updated Title" }),
+      );
+    });
+  });
+});

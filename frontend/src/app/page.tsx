@@ -7,6 +7,7 @@ import { apiGetMe, apiLogout, getStoredToken, removeToken, storeToken } from "@/
 
 export default function Home() {
   const [token, setToken] = useState<string | null>(null);
+  const [username, setUsername] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -16,8 +17,12 @@ export default function Home() {
       return;
     }
     apiGetMe(stored).then((user) => {
-      if (user) setToken(stored);
-      else removeToken();
+      if (user) {
+        setToken(stored);
+        setUsername(user.username);
+      } else {
+        removeToken();
+      }
       setReady(true);
     });
   }, []);
@@ -25,6 +30,9 @@ export default function Home() {
   const handleLogin = (newToken: string) => {
     storeToken(newToken);
     setToken(newToken);
+    apiGetMe(newToken).then((user) => {
+      if (user) setUsername(user.username);
+    });
   };
 
   const handleLogout = async () => {
@@ -33,10 +41,11 @@ export default function Home() {
     } finally {
       removeToken();
       setToken(null);
+      setUsername(null);
     }
   };
 
   if (!ready) return null;
-  if (!token) return <LoginForm onLogin={handleLogin} />;
-  return <KanbanBoard token={token} onLogout={handleLogout} />;
+  if (!token || !username) return <LoginForm onLogin={handleLogin} />;
+  return <KanbanBoard token={token} username={username} onLogout={handleLogout} />;
 }

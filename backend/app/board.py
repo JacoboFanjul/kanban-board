@@ -9,14 +9,39 @@ from app import db
 router = APIRouter(prefix="/api")
 
 
+# ---------------------------------------------------------------------------
+# Request models
+# ---------------------------------------------------------------------------
+
+class BoardTitleRequest(BaseModel):
+    title: str
+
+
 class RenameColumnRequest(BaseModel):
     title: str
+
+
+class CreateColumnRequest(BaseModel):
+    title: str
+
+
+class MoveColumnRequest(BaseModel):
+    position: int
 
 
 class CreateCardRequest(BaseModel):
     column_id: str
     title: str
     details: str = ""
+    due_date: str | None = None
+    label: str | None = None
+
+
+class UpdateCardRequest(BaseModel):
+    title: str | None = None
+    details: str | None = None
+    due_date: str | None = None
+    label: str | None = None
 
 
 class MoveCardRequest(BaseModel):
@@ -24,9 +49,77 @@ class MoveCardRequest(BaseModel):
     position: int
 
 
+# ---------------------------------------------------------------------------
+# Board routes
+# ---------------------------------------------------------------------------
+
+@router.get("/boards")
+def list_boards(username: Annotated[str, Depends(require_auth)]):
+    return db.list_boards(username)
+
+
+@router.post("/boards", status_code=201)
+def create_board(
+    body: BoardTitleRequest,
+    username: Annotated[str, Depends(require_auth)],
+):
+    return db.create_board(username, body.title)
+
+
+@router.get("/boards/{board_id}")
+def get_board_by_id(
+    board_id: str,
+    username: Annotated[str, Depends(require_auth)],
+):
+    board = db.get_board(username, board_id)
+    if not board.get("id"):
+        raise HTTPException(status_code=404, detail="Board not found")
+    return board
+
+
+@router.put("/boards/{board_id}")
+def rename_board(
+    board_id: str,
+    body: BoardTitleRequest,
+    username: Annotated[str, Depends(require_auth)],
+):
+    if not db.rename_board(username, board_id, body.title):
+        raise HTTPException(status_code=404, detail="Board not found")
+    return {"ok": True}
+
+
+@router.delete("/boards/{board_id}", status_code=204)
+def delete_board(
+    board_id: str,
+    username: Annotated[str, Depends(require_auth)],
+):
+    if not db.delete_board(username, board_id):
+        raise HTTPException(status_code=404, detail="Board not found")
+
+
+# ---------------------------------------------------------------------------
+# Backward-compat: GET /api/board (returns first board)
+# ---------------------------------------------------------------------------
+
 @router.get("/board")
 def get_board(username: Annotated[str, Depends(require_auth)]):
     return db.get_board(username)
+
+
+# ---------------------------------------------------------------------------
+# Column routes
+# ---------------------------------------------------------------------------
+
+@router.post("/boards/{board_id}/columns", status_code=201)
+def create_column(
+    board_id: str,
+    body: CreateColumnRequest,
+    username: Annotated[str, Depends(require_auth)],
+):
+    col = db.create_column(username, board_id, body.title)
+    if not col:
+        raise HTTPException(status_code=404, detail="Board not found")
+    return col
 
 
 @router.put("/board/columns/{column_id}")
@@ -40,15 +133,53 @@ def rename_column(
     return {"ok": True}
 
 
+@router.delete("/board/columns/{column_id}", status_code=204)
+def delete_column(
+    column_id: str,
+    username: Annotated[str, Depends(require_auth)],
+):
+    if not db.delete_column(username, column_id):
+        raise HTTPException(status_code=404, detail="Column not found")
+
+
+@router.put("/board/columns/{column_id}/position")
+def move_column(
+    column_id: str,
+    body: MoveColumnRequest,
+    username: Annotated[str, Depends(require_auth)],
+):
+    if not db.move_column(username, column_id, body.position):
+        raise HTTPException(status_code=404, detail="Column not found")
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# Card routes
+# ---------------------------------------------------------------------------
+
 @router.post("/board/cards", status_code=201)
 def create_card(
     body: CreateCardRequest,
     username: Annotated[str, Depends(require_auth)],
 ):
-    card = db.create_card(username, body.column_id, body.title, body.details)
+    card = db.create_card(
+        username, body.column_id, body.title, body.details,
+        body.due_date, body.label,
+    )
     if not card:
         raise HTTPException(status_code=404, detail="Column not found")
     return card
+
+
+@router.put("/board/cards/{card_id}")
+def update_card(
+    card_id: str,
+    body: UpdateCardRequest,
+    username: Annotated[str, Depends(require_auth)],
+):
+    if not db.update_card(username, card_id, body.title, body.details, body.due_date, body.label):
+        raise HTTPException(status_code=404, detail="Card not found")
+    return {"ok": True}
 
 
 @router.delete("/board/cards/{card_id}", status_code=204)
