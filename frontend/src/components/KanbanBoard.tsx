@@ -30,6 +30,7 @@ import {
   apiCreateCard,
   apiUpdateCard,
   apiArchiveCard,
+  apiUnarchiveCard,
   apiGetArchivedCards,
   apiSearchCards,
   apiDeleteCard,
@@ -63,6 +64,16 @@ function normalizeBoard(api: ApiBoard): BoardData {
   return { columns, cards };
 }
 
+function removeCardFromBoard(board: BoardData, columnId: string, cardId: string): BoardData {
+  return {
+    ...board,
+    cards: Object.fromEntries(Object.entries(board.cards).filter(([id]) => id !== cardId)),
+    columns: board.columns.map((col) =>
+      col.id === columnId ? { ...col, cardIds: col.cardIds.filter((id) => id !== cardId) } : col,
+    ),
+  };
+}
+
 export const KanbanBoard = ({ token, username, onLogout }: Props) => {
   const [board, setBoard] = useState<BoardData | null>(null);
   const [boardSummaries, setBoardSummaries] = useState<ApiBoardSummary[]>([]);
@@ -90,6 +101,15 @@ export const KanbanBoard = ({ token, username, onLogout }: Props) => {
     onLogout?.();
   }, [onLogout]);
 
+  // Route an API rejection: a 401 logs out, anything else runs the optional fallback.
+  const handleApiError = useCallback(
+    (err: unknown, fallback?: () => void) => {
+      if (err instanceof ApiError && err.status === 401) handle401();
+      else fallback?.();
+    },
+    [handle401],
+  );
+
   const loadBoard = useCallback(
     (boardId: string) => {
       setLoadError(false);
@@ -98,12 +118,9 @@ export const KanbanBoard = ({ token, username, onLogout }: Props) => {
           setBoard(normalizeBoard(data));
           setBoardTitle(data.title);
         })
-        .catch((err: unknown) => {
-          if (err instanceof ApiError && err.status === 401) handle401();
-          else setLoadError(true);
-        });
+        .catch((err: unknown) => handleApiError(err, () => setLoadError(true)));
     },
-    [token, handle401],
+    [token, handleApiError],
   );
 
   const refreshBoards = useCallback(async () => {
@@ -112,10 +129,10 @@ export const KanbanBoard = ({ token, username, onLogout }: Props) => {
       setBoardSummaries(summaries);
       return summaries;
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) handle401();
+      handleApiError(err);
       return [];
     }
-  }, [token, handle401]);
+  }, [token, handleApiError]);
 
   useEffect(() => {
     apiListBoards(token)
@@ -129,9 +146,7 @@ export const KanbanBoard = ({ token, username, onLogout }: Props) => {
           setBoard({ columns: [], cards: {} });
         }
       })
-      .catch((err: unknown) => {
-        if (err instanceof ApiError && err.status === 401) handle401();
-      });
+      .catch((err: unknown) => handleApiError(err));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -171,10 +186,9 @@ export const KanbanBoard = ({ token, username, onLogout }: Props) => {
       const prevBoard = board;
       const newColumns = arrayMove(board.columns, oldIndex, newIndex);
       setBoard((prev) => (prev ? { ...prev, columns: newColumns } : prev));
-      apiMoveColumn(token, active.id as string, newIndex).catch((err: unknown) => {
-        if (err instanceof ApiError && err.status === 401) handle401();
-        else setBoard(prevBoard);
-      });
+      apiMoveColumn(token, active.id as string, newIndex).catch((err: unknown) =>
+        handleApiError(err, () => setBoard(prevBoard)),
+      );
       return;
     }
 
@@ -186,10 +200,9 @@ export const KanbanBoard = ({ token, username, onLogout }: Props) => {
     const targetColumn = newColumns.find((col) => col.cardIds.includes(activeId));
     if (targetColumn) {
       const position = targetColumn.cardIds.indexOf(activeId);
-      apiMoveCard(token, activeId, targetColumn.id, position).catch((err: unknown) => {
-        if (err instanceof ApiError && err.status === 401) handle401();
-        else setBoard(prevBoard);
-      });
+      apiMoveCard(token, activeId, targetColumn.id, position).catch((err: unknown) =>
+        handleApiError(err, () => setBoard(prevBoard)),
+      );
     }
   };
 
@@ -201,11 +214,14 @@ export const KanbanBoard = ({ token, username, onLogout }: Props) => {
     );
   };
 
+  const reloadActiveBoard = () => {
+    if (activeBoardId) loadBoard(activeBoardId);
+  };
+
   const handleRenameColumnCommit = (columnId: string, title: string) => {
-    apiRenameColumn(token, columnId, title).catch((err: unknown) => {
-      if (err instanceof ApiError && err.status === 401) handle401();
-      else if (activeBoardId) loadBoard(activeBoardId);
-    });
+    apiRenameColumn(token, columnId, title).catch((err: unknown) =>
+      handleApiError(err, reloadActiveBoard),
+    );
   };
 
   const handleAddCard = async (columnId: string, title: string, details: string) => {
@@ -223,7 +239,7 @@ export const KanbanBoard = ({ token, username, onLogout }: Props) => {
           : prev,
       );
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) handle401();
+      handleApiError(err);
     }
   };
 
@@ -236,49 +252,28 @@ export const KanbanBoard = ({ token, username, onLogout }: Props) => {
     try {
       await apiUpdateCard(token, cardId, { title, details });
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) handle401();
-      else if (activeBoardId) loadBoard(activeBoardId);
+      handleApiError(err, reloadActiveBoard);
     }
   };
 
-  const handleDeleteCard = (columnId: string, cardId: string) => {
+  const removeCard = (
+    columnId: string,
+    cardId: string,
+    apiCall: (token: string, cardId: string) => Promise<void>,
+  ) => {
     const prevBoard = board;
-    setBoard((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        cards: Object.fromEntries(Object.entries(prev.cards).filter(([id]) => id !== cardId)),
-        columns: prev.columns.map((col) =>
-          col.id === columnId
-            ? { ...col, cardIds: col.cardIds.filter((id) => id !== cardId) }
-            : col,
-        ),
-      };
-    });
-    apiDeleteCard(token, cardId).catch((err: unknown) => {
-      if (err instanceof ApiError && err.status === 401) handle401();
-      else setBoard(prevBoard);
-    });
+    setBoard((prev) => (prev ? removeCardFromBoard(prev, columnId, cardId) : prev));
+    apiCall(token, cardId).catch((err: unknown) =>
+      handleApiError(err, () => setBoard(prevBoard)),
+    );
+  };
+
+  const handleDeleteCard = (columnId: string, cardId: string) => {
+    removeCard(columnId, cardId, apiDeleteCard);
   };
 
   const handleArchiveCard = (columnId: string, cardId: string) => {
-    const prevBoard = board;
-    setBoard((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        cards: Object.fromEntries(Object.entries(prev.cards).filter(([id]) => id !== cardId)),
-        columns: prev.columns.map((col) =>
-          col.id === columnId
-            ? { ...col, cardIds: col.cardIds.filter((id) => id !== cardId) }
-            : col,
-        ),
-      };
-    });
-    apiArchiveCard(token, cardId).catch((err) => {
-      if (err instanceof ApiError && err.status === 401) handle401();
-      else setBoard(prevBoard);
-    });
+    removeCard(columnId, cardId, apiArchiveCard);
   };
 
   const handleExportBoard = async () => {
@@ -293,7 +288,7 @@ export const KanbanBoard = ({ token, username, onLogout }: Props) => {
       a.click();
       URL.revokeObjectURL(url);
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) handle401();
+      handleApiError(err);
     }
   };
 
@@ -308,7 +303,7 @@ export const KanbanBoard = ({ token, username, onLogout }: Props) => {
       const results = await apiSearchCards(token, activeBoardId, { q });
       setSearchResults(results);
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) handle401();
+      handleApiError(err);
     }
   };
 
@@ -319,18 +314,17 @@ export const KanbanBoard = ({ token, username, onLogout }: Props) => {
       setArchivedCards(cards);
       setShowArchive(true);
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) handle401();
+      handleApiError(err);
     }
   };
 
   const handleUnarchive = async (cardId: string) => {
     try {
-      const { apiUnarchiveCard } = await import("@/lib/api");
       await apiUnarchiveCard(token, cardId);
       setArchivedCards((prev) => prev.filter((c) => c.id !== cardId));
-      if (activeBoardId) loadBoard(activeBoardId);
+      reloadActiveBoard();
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) handle401();
+      handleApiError(err);
     }
   };
 
@@ -345,7 +339,7 @@ export const KanbanBoard = ({ token, username, onLogout }: Props) => {
           : prev,
       );
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) handle401();
+      handleApiError(err);
     }
     setWipEditingColId(null);
   };
@@ -360,7 +354,7 @@ export const KanbanBoard = ({ token, username, onLogout }: Props) => {
           : prev,
       );
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) handle401();
+      handleApiError(err);
     }
   };
 
@@ -379,10 +373,9 @@ export const KanbanBoard = ({ token, username, onLogout }: Props) => {
           }
         : prev,
     );
-    apiDeleteColumn(token, columnId).catch((err) => {
-      if (err instanceof ApiError && err.status === 401) handle401();
-      else setBoard(prevBoard);
-    });
+    apiDeleteColumn(token, columnId).catch((err) =>
+      handleApiError(err, () => setBoard(prevBoard)),
+    );
   };
 
   const handleSwitchBoard = (boardId: string) => {
@@ -404,7 +397,7 @@ export const KanbanBoard = ({ token, username, onLogout }: Props) => {
       loadBoard(newBoard.id);
       setShowBoardMenu(false);
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) handle401();
+      handleApiError(err);
     }
   };
 
@@ -425,7 +418,7 @@ export const KanbanBoard = ({ token, username, onLogout }: Props) => {
         }
       }
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) handle401();
+      handleApiError(err);
     }
   };
 
@@ -438,7 +431,7 @@ export const KanbanBoard = ({ token, username, onLogout }: Props) => {
         prev.map((b) => (b.id === activeBoardId ? { ...b, title: boardTitle.trim() } : b)),
       );
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) handle401();
+      handleApiError(err);
     }
   };
 

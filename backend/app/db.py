@@ -90,16 +90,13 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE cards ADD COLUMN archived INTEGER NOT NULL DEFAULT 0")
     if "created_at" not in card_cols:
         conn.execute("ALTER TABLE cards ADD COLUMN created_at TEXT")
+    if "assigned_to" not in card_cols:
+        conn.execute("ALTER TABLE cards ADD COLUMN assigned_to TEXT")
 
     # Add wip_limit to columns if missing
     col_cols = {r[1] for r in conn.execute("PRAGMA table_info(columns)").fetchall()}
     if "wip_limit" not in col_cols:
         conn.execute("ALTER TABLE columns ADD COLUMN wip_limit INTEGER")
-
-    # Add assigned_to column to cards if missing
-    card_cols2 = {r[1] for r in conn.execute("PRAGMA table_info(cards)").fetchall()}
-    if "assigned_to" not in card_cols2:
-        conn.execute("ALTER TABLE cards ADD COLUMN assigned_to TEXT")
 
     # Add email column to users if missing
     user_cols = {r[1] for r in conn.execute("PRAGMA table_info(users)").fetchall()}
@@ -287,6 +284,33 @@ def _board_owned_by(conn: sqlite3.Connection, username: str, board_id: str) -> b
     )
 
 
+def _column_owned_by(conn: sqlite3.Connection, username: str, column_id: str) -> bool:
+    return bool(
+        conn.execute(
+            """
+            SELECT 1 FROM columns
+            JOIN boards ON columns.board_id = boards.id
+            WHERE columns.id = ? AND boards.username = ?
+            """,
+            (column_id, username),
+        ).fetchone()
+    )
+
+
+def _card_owned_by(conn: sqlite3.Connection, username: str, card_id: str) -> bool:
+    return bool(
+        conn.execute(
+            """
+            SELECT 1 FROM cards
+            JOIN columns ON cards.column_id = columns.id
+            JOIN boards ON columns.board_id = boards.id
+            WHERE cards.id = ? AND boards.username = ?
+            """,
+            (card_id, username),
+        ).fetchone()
+    )
+
+
 def get_board(username: str, board_id: str | None = None) -> dict:
     with get_conn() as conn:
         if board_id:
@@ -324,6 +348,15 @@ def get_board(username: str, board_id: str | None = None) -> dict:
         }
 
 
+_CARD_LIST_SELECT = """
+    SELECT cards.id, cards.title, cards.details, cards.due_date,
+           cards.label, cards.priority, cards.created_at, cards.assigned_to,
+           cards.column_id, columns.title AS column_title
+    FROM cards
+    JOIN columns ON cards.column_id = columns.id
+"""
+
+
 def search_cards(username: str, board_id: str, q: str = "", label: str = "", priority: str = "") -> list[dict]:
     with get_conn() as conn:
         if not _board_owned_by(conn, username, board_id):
@@ -344,15 +377,7 @@ def search_cards(username: str, board_id: str, q: str = "", label: str = "", pri
             params.append(priority)
         where = " AND ".join(conditions)
         rows = conn.execute(
-            f"""
-            SELECT cards.id, cards.title, cards.details, cards.due_date,
-                   cards.label, cards.priority, cards.created_at, cards.assigned_to,
-                   cards.column_id, columns.title AS column_title
-            FROM cards
-            JOIN columns ON cards.column_id = columns.id
-            WHERE {where}
-            ORDER BY columns.position, cards.position
-            """,
+            f"{_CARD_LIST_SELECT} WHERE {where} ORDER BY columns.position, cards.position",
             params,
         ).fetchall()
         return [dict(r) for r in rows]
@@ -363,52 +388,27 @@ def get_archived_cards(username: str, board_id: str) -> list[dict]:
         if not _board_owned_by(conn, username, board_id):
             return []
         rows = conn.execute(
-            """
-            SELECT cards.id, cards.title, cards.details, cards.due_date,
-                   cards.label, cards.priority, cards.created_at, cards.assigned_to,
-                   cards.column_id, columns.title AS column_title
-            FROM cards
-            JOIN columns ON cards.column_id = columns.id
-            WHERE columns.board_id = ? AND cards.archived = 1
-            ORDER BY cards.rowid DESC
-            """,
+            f"{_CARD_LIST_SELECT} "
+            "WHERE columns.board_id = ? AND cards.archived = 1 ORDER BY cards.rowid DESC",
             (board_id,),
         ).fetchall()
         return [dict(r) for r in rows]
 
 
-def archive_card(username: str, card_id: str) -> bool:
+def _set_card_archived(username: str, card_id: str, archived: int) -> bool:
     with get_conn() as conn:
-        row = conn.execute(
-            """
-            SELECT cards.id FROM cards
-            JOIN columns ON cards.column_id = columns.id
-            JOIN boards ON columns.board_id = boards.id
-            WHERE cards.id = ? AND boards.username = ?
-            """,
-            (card_id, username),
-        ).fetchone()
-        if not row:
+        if not _card_owned_by(conn, username, card_id):
             return False
-        conn.execute("UPDATE cards SET archived = 1 WHERE id = ?", (card_id,))
+        conn.execute("UPDATE cards SET archived = ? WHERE id = ?", (archived, card_id))
         return True
+
+
+def archive_card(username: str, card_id: str) -> bool:
+    return _set_card_archived(username, card_id, 1)
 
 
 def unarchive_card(username: str, card_id: str) -> bool:
-    with get_conn() as conn:
-        row = conn.execute(
-            """
-            SELECT cards.id FROM cards
-            JOIN columns ON cards.column_id = columns.id
-            JOIN boards ON columns.board_id = boards.id
-            WHERE cards.id = ? AND boards.username = ?
-            """,
-            (card_id, username),
-        ).fetchone()
-        if not row:
-            return False
-        conn.execute("UPDATE cards SET archived = 0 WHERE id = ?", (card_id,))
-        return True
+    return _set_card_archived(username, card_id, 0)
 
 
 # ---------------------------------------------------------------------------
@@ -417,9 +417,6 @@ def unarchive_card(username: str, card_id: str) -> bool:
 
 def rename_column(username: str, column_id: str, title: str) -> bool:
     with get_conn() as conn:
-        board_id = get_board_id(conn, username)
-        if not board_id:
-            return False
         result = conn.execute(
             "UPDATE columns SET title = ? WHERE id = ? AND board_id IN "
             "(SELECT id FROM boards WHERE username = ?)",
@@ -534,15 +531,7 @@ def create_card(
     priority: str | None = None, assigned_to: str | None = None,
 ) -> dict | None:
     with get_conn() as conn:
-        col = conn.execute(
-            """
-            SELECT columns.id FROM columns
-            JOIN boards ON columns.board_id = boards.id
-            WHERE columns.id = ? AND boards.username = ?
-            """,
-            (column_id, username),
-        ).fetchone()
-        if not col:
+        if not _column_owned_by(conn, username, column_id):
             return None
         max_pos = conn.execute(
             "SELECT COALESCE(MAX(position), -1) FROM cards WHERE column_id = ? AND archived = 0",
@@ -573,42 +562,23 @@ def update_card(
     assigned_to: str | None = None,
 ) -> bool:
     with get_conn() as conn:
-        row = conn.execute(
-            """
-            SELECT cards.id FROM cards
-            JOIN columns ON cards.column_id = columns.id
-            JOIN boards ON columns.board_id = boards.id
-            WHERE cards.id = ? AND boards.username = ?
-            """,
-            (card_id, username),
-        ).fetchone()
-        if not row:
+        if not _card_owned_by(conn, username, card_id):
             return False
-        updates = []
-        params = []
-        if title is not None:
-            updates.append("title = ?")
-            params.append(title)
-        if details is not None:
-            updates.append("details = ?")
-            params.append(details)
-        if due_date is not None:
-            updates.append("due_date = ?")
-            params.append(due_date)
-        if label is not None:
-            updates.append("label = ?")
-            params.append(label)
-        if priority is not None:
-            updates.append("priority = ?")
-            params.append(priority)
-        if assigned_to is not None:
-            updates.append("assigned_to = ?")
-            params.append(assigned_to)
-        if not updates:
+        fields = {
+            "title": title,
+            "details": details,
+            "due_date": due_date,
+            "label": label,
+            "priority": priority,
+            "assigned_to": assigned_to,
+        }
+        set_cols = [f"{col} = ?" for col, value in fields.items() if value is not None]
+        if not set_cols:
             return True
+        params = [value for value in fields.values() if value is not None]
         params.append(card_id)
         conn.execute(
-            f"UPDATE cards SET {', '.join(updates)} WHERE id = ?",
+            f"UPDATE cards SET {', '.join(set_cols)} WHERE id = ?",
             params,
         )
         return True
@@ -653,15 +623,7 @@ def move_card(username: str, card_id: str, target_column_id: str, target_positio
         if not row:
             return False
         # Verify target column belongs to this user's board
-        target_col = conn.execute(
-            """
-            SELECT columns.id FROM columns
-            JOIN boards ON columns.board_id = boards.id
-            WHERE columns.id = ? AND boards.username = ?
-            """,
-            (target_column_id, username),
-        ).fetchone()
-        if not target_col:
+        if not _column_owned_by(conn, username, target_column_id):
             return False
 
         src_col_id = row["column_id"]
@@ -721,17 +683,7 @@ def move_card(username: str, card_id: str, target_column_id: str, target_positio
 
 def get_card_comments(username: str, card_id: str) -> list[dict]:
     with get_conn() as conn:
-        # Verify card belongs to a board owned by username
-        row = conn.execute(
-            """
-            SELECT cards.id FROM cards
-            JOIN columns ON cards.column_id = columns.id
-            JOIN boards ON columns.board_id = boards.id
-            WHERE cards.id = ? AND boards.username = ?
-            """,
-            (card_id, username),
-        ).fetchone()
-        if not row:
+        if not _card_owned_by(conn, username, card_id):
             return []
         rows = conn.execute(
             "SELECT id, card_id, username, content, created_at "
@@ -743,16 +695,7 @@ def get_card_comments(username: str, card_id: str) -> list[dict]:
 
 def create_comment(username: str, card_id: str, content: str) -> dict | None:
     with get_conn() as conn:
-        row = conn.execute(
-            """
-            SELECT cards.id FROM cards
-            JOIN columns ON cards.column_id = columns.id
-            JOIN boards ON columns.board_id = boards.id
-            WHERE cards.id = ? AND boards.username = ?
-            """,
-            (card_id, username),
-        ).fetchone()
-        if not row:
+        if not _card_owned_by(conn, username, card_id):
             return None
         comment_id = secrets.token_hex(8)
         now = datetime.now(timezone.utc).isoformat()

@@ -60,6 +60,34 @@ async function checked(res: Response): Promise<Response> {
   return res;
 }
 
+type RequestOptions = { method?: string; body?: unknown };
+
+// Authenticated request against a checked (2xx-or-throw) endpoint. A JSON
+// Content-Type header is sent only when a body is provided.
+async function request(
+  token: string,
+  path: string,
+  { method, body }: RequestOptions = {},
+): Promise<Response> {
+  const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+  if (body !== undefined) headers["Content-Type"] = "application/json";
+  const res = await fetch(path, {
+    method,
+    headers,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  return checked(res);
+}
+
+async function requestJson<T>(
+  token: string,
+  path: string,
+  options?: RequestOptions,
+): Promise<T> {
+  const res = await request(token, path, options);
+  return res.json() as Promise<T>;
+}
+
 // ---------------------------------------------------------------------------
 // Auth
 // ---------------------------------------------------------------------------
@@ -133,25 +161,16 @@ export async function apiChangePassword(
 // ---------------------------------------------------------------------------
 
 export async function apiListBoards(token: string): Promise<ApiBoardSummary[]> {
-  const res = await checked(await fetch("/api/boards", { headers: authHeaders(token) }));
-  return res.json() as Promise<ApiBoardSummary[]>;
+  return requestJson<ApiBoardSummary[]>(token, "/api/boards");
 }
 
 export async function apiCreateBoard(token: string, title: string): Promise<ApiBoardSummary> {
-  const res = await checked(
-    await fetch("/api/boards", {
-      method: "POST",
-      headers: authHeaders(token),
-      body: JSON.stringify({ title }),
-    }),
-  );
-  return res.json() as Promise<ApiBoardSummary>;
+  return requestJson<ApiBoardSummary>(token, "/api/boards", { method: "POST", body: { title } });
 }
 
 export async function apiGetBoard(token: string, boardId?: string): Promise<ApiBoard> {
   const url = boardId ? `/api/boards/${boardId}` : "/api/board";
-  const res = await checked(await fetch(url, { headers: authHeaders(token) }));
-  return res.json() as Promise<ApiBoard>;
+  return requestJson<ApiBoard>(token, url);
 }
 
 export async function apiRenameBoard(
@@ -159,22 +178,11 @@ export async function apiRenameBoard(
   boardId: string,
   title: string,
 ): Promise<void> {
-  await checked(
-    await fetch(`/api/boards/${boardId}`, {
-      method: "PUT",
-      headers: authHeaders(token),
-      body: JSON.stringify({ title }),
-    }),
-  );
+  await request(token, `/api/boards/${boardId}`, { method: "PUT", body: { title } });
 }
 
 export async function apiDeleteBoard(token: string, boardId: string): Promise<void> {
-  await checked(
-    await fetch(`/api/boards/${boardId}`, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${token}` },
-    }),
-  );
+  await request(token, `/api/boards/${boardId}`, { method: "DELETE" });
 }
 
 // ---------------------------------------------------------------------------
@@ -186,14 +194,10 @@ export async function apiCreateColumn(
   boardId: string,
   title: string,
 ): Promise<{ id: string; title: string; position: number }> {
-  const res = await checked(
-    await fetch(`/api/boards/${boardId}/columns`, {
-      method: "POST",
-      headers: authHeaders(token),
-      body: JSON.stringify({ title }),
-    }),
-  );
-  return res.json() as Promise<{ id: string; title: string; position: number }>;
+  return requestJson(token, `/api/boards/${boardId}/columns`, {
+    method: "POST",
+    body: { title },
+  });
 }
 
 export async function apiRenameColumn(
@@ -201,22 +205,11 @@ export async function apiRenameColumn(
   columnId: string,
   title: string,
 ): Promise<void> {
-  await checked(
-    await fetch(`/api/board/columns/${columnId}`, {
-      method: "PUT",
-      headers: authHeaders(token),
-      body: JSON.stringify({ title }),
-    }),
-  );
+  await request(token, `/api/board/columns/${columnId}`, { method: "PUT", body: { title } });
 }
 
 export async function apiDeleteColumn(token: string, columnId: string): Promise<void> {
-  await checked(
-    await fetch(`/api/board/columns/${columnId}`, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${token}` },
-    }),
-  );
+  await request(token, `/api/board/columns/${columnId}`, { method: "DELETE" });
 }
 
 export async function apiMoveColumn(
@@ -224,13 +217,10 @@ export async function apiMoveColumn(
   columnId: string,
   position: number,
 ): Promise<void> {
-  await checked(
-    await fetch(`/api/board/columns/${columnId}/position`, {
-      method: "PUT",
-      headers: authHeaders(token),
-      body: JSON.stringify({ position }),
-    }),
-  );
+  await request(token, `/api/board/columns/${columnId}/position`, {
+    method: "PUT",
+    body: { position },
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -243,14 +233,10 @@ export async function apiCreateCard(
   title: string,
   details: string,
 ): Promise<ApiCard> {
-  const res = await checked(
-    await fetch("/api/board/cards", {
-      method: "POST",
-      headers: authHeaders(token),
-      body: JSON.stringify({ column_id: columnId, title, details }),
-    }),
-  );
-  return res.json() as Promise<ApiCard>;
+  return requestJson<ApiCard>(token, "/api/board/cards", {
+    method: "POST",
+    body: { column_id: columnId, title, details },
+  });
 }
 
 export async function apiUpdateCard(
@@ -264,40 +250,19 @@ export async function apiUpdateCard(
     priority?: string | null;
   },
 ): Promise<void> {
-  await checked(
-    await fetch(`/api/board/cards/${cardId}`, {
-      method: "PUT",
-      headers: authHeaders(token),
-      body: JSON.stringify(updates),
-    }),
-  );
+  await request(token, `/api/board/cards/${cardId}`, { method: "PUT", body: updates });
 }
 
 export async function apiArchiveCard(token: string, cardId: string): Promise<void> {
-  await checked(
-    await fetch(`/api/board/cards/${cardId}/archive`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
-    }),
-  );
+  await request(token, `/api/board/cards/${cardId}/archive`, { method: "POST" });
 }
 
 export async function apiUnarchiveCard(token: string, cardId: string): Promise<void> {
-  await checked(
-    await fetch(`/api/board/cards/${cardId}/unarchive`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
-    }),
-  );
+  await request(token, `/api/board/cards/${cardId}/unarchive`, { method: "POST" });
 }
 
 export async function apiDeleteCard(token: string, cardId: string): Promise<void> {
-  await checked(
-    await fetch(`/api/board/cards/${cardId}`, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${token}` },
-    }),
-  );
+  await request(token, `/api/board/cards/${cardId}`, { method: "DELETE" });
 }
 
 export async function apiSearchCards(
@@ -309,22 +274,14 @@ export async function apiSearchCards(
   if (params.q) qs.set("q", params.q);
   if (params.label) qs.set("label", params.label);
   if (params.priority) qs.set("priority", params.priority);
-  const res = await checked(
-    await fetch(`/api/boards/${boardId}/search?${qs.toString()}`, {
-      headers: authHeaders(token),
-    }),
-  );
-  return res.json() as Promise<ApiCardSearchResult[]>;
+  return requestJson<ApiCardSearchResult[]>(token, `/api/boards/${boardId}/search?${qs.toString()}`);
 }
 
 export async function apiGetArchivedCards(
   token: string,
   boardId: string,
 ): Promise<ApiCardSearchResult[]> {
-  const res = await checked(
-    await fetch(`/api/boards/${boardId}/archived`, { headers: authHeaders(token) }),
-  );
-  return res.json() as Promise<ApiCardSearchResult[]>;
+  return requestJson<ApiCardSearchResult[]>(token, `/api/boards/${boardId}/archived`);
 }
 
 export async function apiSetWipLimit(
@@ -332,13 +289,10 @@ export async function apiSetWipLimit(
   columnId: string,
   wipLimit: number | null,
 ): Promise<void> {
-  await checked(
-    await fetch(`/api/board/columns/${columnId}/wip-limit`, {
-      method: "PUT",
-      headers: authHeaders(token),
-      body: JSON.stringify({ wip_limit: wipLimit }),
-    }),
-  );
+  await request(token, `/api/board/columns/${columnId}/wip-limit`, {
+    method: "PUT",
+    body: { wip_limit: wipLimit },
+  });
 }
 
 export async function apiMoveCard(
@@ -347,13 +301,10 @@ export async function apiMoveCard(
   columnId: string,
   position: number,
 ): Promise<void> {
-  await checked(
-    await fetch(`/api/board/cards/${cardId}/move`, {
-      method: "PUT",
-      headers: authHeaders(token),
-      body: JSON.stringify({ column_id: columnId, position }),
-    }),
-  );
+  await request(token, `/api/board/cards/${cardId}/move`, {
+    method: "PUT",
+    body: { column_id: columnId, position },
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -361,10 +312,7 @@ export async function apiMoveCard(
 // ---------------------------------------------------------------------------
 
 export async function apiGetComments(token: string, cardId: string): Promise<ApiComment[]> {
-  const res = await checked(
-    await fetch(`/api/board/cards/${cardId}/comments`, { headers: authHeaders(token) }),
-  );
-  return res.json() as Promise<ApiComment[]>;
+  return requestJson<ApiComment[]>(token, `/api/board/cards/${cardId}/comments`);
 }
 
 export async function apiCreateComment(
@@ -372,23 +320,14 @@ export async function apiCreateComment(
   cardId: string,
   content: string,
 ): Promise<ApiComment> {
-  const res = await checked(
-    await fetch(`/api/board/cards/${cardId}/comments`, {
-      method: "POST",
-      headers: authHeaders(token),
-      body: JSON.stringify({ content }),
-    }),
-  );
-  return res.json() as Promise<ApiComment>;
+  return requestJson<ApiComment>(token, `/api/board/cards/${cardId}/comments`, {
+    method: "POST",
+    body: { content },
+  });
 }
 
 export async function apiDeleteComment(token: string, commentId: string): Promise<void> {
-  await checked(
-    await fetch(`/api/board/comments/${commentId}`, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${token}` },
-    }),
-  );
+  await request(token, `/api/board/comments/${commentId}`, { method: "DELETE" });
 }
 
 // ---------------------------------------------------------------------------
@@ -396,10 +335,7 @@ export async function apiDeleteComment(token: string, commentId: string): Promis
 // ---------------------------------------------------------------------------
 
 export async function apiExportBoard(token: string, boardId: string): Promise<unknown> {
-  const res = await checked(
-    await fetch(`/api/boards/${boardId}/export`, { headers: authHeaders(token) }),
-  );
-  return res.json();
+  return requestJson<unknown>(token, `/api/boards/${boardId}/export`);
 }
 
 // ---------------------------------------------------------------------------
