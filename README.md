@@ -1,12 +1,12 @@
-# Kanban Studio
+# 📋 Kanban Studio
 
-Full-stack Kanban board MVP. Multi-board support with columns, cards, drag-and-drop reordering, priorities, comments, assignment, archiving, search/filter, WIP limits, and board export.
+Full-stack Kanban board MVP. Multi-board support with columns, cards, drag-and-drop reordering, priorities, comments, assignment, archiving, search/filter, WIP limits, and board export. 🚀
 
-- **Frontend:** Next.js 16 (static export), React 19, TypeScript, Tailwind, @dnd-kit
-- **Backend:** Python FastAPI, SQLite
-- **Deployment:** Single Docker container — FastAPI serves the pre-built static frontend
+- **Frontend:** ⚛️ Next.js 16 (static export), React 19, TypeScript, Tailwind, @dnd-kit
+- **Backend:** 🐍 Python FastAPI, SQLite
+- **Deployment:** 🐳 Single Docker container — FastAPI serves the pre-built static frontend
 
-## Quick start (Docker)
+## 🏁 Quick start (Docker)
 
 ```bash
 scripts/start.sh   # docker-compose up --build -d
@@ -18,7 +18,7 @@ App available at http://localhost:8000. Log in with `user` / `password`.
 scripts/stop.sh    # docker-compose down
 ```
 
-## Local development
+## 💻 Local development
 
 ### Backend
 
@@ -42,7 +42,7 @@ npm run test:e2e     # Playwright
 npm run test:all     # unit + e2e
 ```
 
-## Architecture
+## 🏗️ Architecture
 
 Browser → FastAPI (`:8000`) → static files from `./static` (built frontend). Routes under `/api/*` are handled by FastAPI; all other routes serve the Next.js static export.
 
@@ -52,7 +52,7 @@ Browser → FastAPI (`:8000`) → static files from `./static` (built frontend).
 
 See [`CLAUDE.md`](CLAUDE.md) for detailed module layout and the database schema, and [`docs/`](docs/) for design/planning notes.
 
-## Project structure
+## 📁 Project structure
 
 ```
 backend/    FastAPI app, SQLite access, tests
